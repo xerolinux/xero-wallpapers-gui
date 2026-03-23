@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Xero Wallpaper Browser
+Comment=Browse, preview and download wallpapers & live wallpapers from various sources
+Exec=xero-wallpaper-browser
+Icon=xero-wallpaper-browser
+Terminal=false
+Type=Application
+Categories=Utility;Graphics;
+Keywords=wallpaper;wallpapers;live;download;browse;desktop;background;
+StartupWMClass=xero-wallpaper-browser

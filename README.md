@@ -89,23 +89,7 @@ Auto-detects your desktop environment and applies the wallpaper:
 
 ---
 
-## Installation
-
-### Arch Linux (PKGBUILD)
-
-```bash
-git clone https://github.com/xerolinux/xero-wallpaper-browser.git
-cd xero-wallpaper-browser
-makepkg -si
-```
-
-Then launch from your app menu or run:
-
-```bash
-xero-wallpaper-browser
-```
-
-### Manual
+## Usage From Source
 
 **Dependencies:**
 

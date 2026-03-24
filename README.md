@@ -97,10 +97,17 @@ Auto-detects your desktop environment and applies the wallpaper:
 sudo pacman -S python-pyqt6 python-requests python-beautifulsoup4 python-pillow python-opencv python-numpy qt6-multimedia qt6-multimedia-gstreamer gst-plugins-good gst-plugins-bad gst-libav
 ```
 
+**Clone Repo:**
+
+```bash
+git clone https://github.com/xerolinux/xero-wallpapers-gui
+```
+
 **Run:**
 
 ```bash
-python xero_wallpaper_browser.py
+cd xero-wallpapers-gui/
+python3 xero_wallpaper_browser.py
 ```
 
 ---

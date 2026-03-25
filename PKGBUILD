@@ -1,6 +1,6 @@
 # Maintainer: XeroLinux <xero@xerolinux.xyz>
 pkgname=xero-wallpaper-browser
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="Browse, preview and download wallpapers & live wallpapers from various sources"
 arch=('any')

@@ -1123,6 +1123,106 @@ class LocalBrowserDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
+# About Dialog
+# ---------------------------------------------------------------------------
+
+class AboutDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("About")
+        self.setFixedSize(360, 300)
+        self.setWindowFlags(
+            Qt.WindowType.Dialog |
+            Qt.WindowType.WindowTitleHint |
+            Qt.WindowType.WindowCloseButtonHint
+        )
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(0)
+        layout.setContentsMargins(28, 22, 28, 22)
+
+        # Logo centered
+        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xero_logo.png")
+        if os.path.exists(logo_path):
+            logo_label = QLabel()
+            logo_px = QPixmap(logo_path).scaled(
+                QSize(72, 72), Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            logo_label.setPixmap(logo_px)
+            logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(logo_label)
+
+        layout.addSpacing(10)
+
+        # App name
+        name_label = QLabel("Xero Wallpaper Browser")
+        name_font = name_label.font()
+        name_font.setPointSize(14)
+        name_font.setBold(True)
+        name_label.setFont(name_font)
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(name_label)
+
+        layout.addSpacing(6)
+
+        # Description
+        desc_label = QLabel(
+            "Browse, preview and download wallpapers\n"
+            "from multiple online sources. Part of the\n"
+            "XeroLinux project."
+        )
+        desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc_label.setStyleSheet("color: gray; font-size: 11px;")
+        layout.addWidget(desc_label)
+
+        layout.addSpacing(18)
+
+        # Separator line
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("color: rgba(128,128,128,0.3);")
+        layout.addWidget(sep)
+
+        layout.addSpacing(14)
+
+        links = [
+            ("🌐", "Website", "https://xerolinux.xyz"),
+            ("📖", "Wiki", "https://wiki.xerolinux.xyz"),
+            ("☕", "Donate", "https://ko-fi.com/xerolinux"),
+            ("🐙", "GitHub", "https://github.com/xerolinux"),
+        ]
+
+        icons_row = QHBoxLayout()
+        icons_row.setSpacing(14)
+        icons_row.addStretch()
+
+        for icon, tooltip, url in links:
+            col = QVBoxLayout()
+            col.setSpacing(4)
+            col.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+            btn = QPushButton(icon)
+            btn.setToolTip(tooltip)
+            btn.setFixedSize(52, 44)
+            btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            btn.clicked.connect(lambda checked, u=url: QDesktopServices.openUrl(QUrl(u)))
+            col.addWidget(btn, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+            lbl = QLabel(tooltip)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet("font-size: 10px; color: gray;")
+            col.addWidget(lbl)
+
+            icons_row.addLayout(col)
+
+        icons_row.addStretch()
+        layout.addLayout(icons_row)
+
+        layout.addStretch()
+
+
+# ---------------------------------------------------------------------------
 # Main Window
 # ---------------------------------------------------------------------------
 
@@ -1175,6 +1275,11 @@ class XeroWallpaperBrowser(QMainWindow):
         title_label.setFont(title_font)
         header.addWidget(title_label)
         header.addStretch()
+
+        about_btn = QPushButton("ℹ About")
+        about_btn.setToolTip("About Xero Wallpaper Browser")
+        about_btn.clicked.connect(self._show_about)
+        header.addWidget(about_btn)
 
         main_layout.addLayout(header)
 
@@ -1262,7 +1367,18 @@ class XeroWallpaperBrowser(QMainWindow):
         search_btn.clicked.connect(self._do_search)
         controls.addWidget(search_btn)
 
-        controls.addSpacing(15)
+        controls.addSpacing(8)
+
+        refresh_btn = QPushButton("↻")
+        refresh_btn.setToolTip("Reload wallpapers from the selected source")
+        refresh_btn.setFixedSize(48, 30)
+        refresh_font = refresh_btn.font()
+        refresh_font.setPointSize(16)
+        refresh_btn.setFont(refresh_font)
+        refresh_btn.clicked.connect(self._do_refresh)
+        controls.addWidget(refresh_btn)
+
+        controls.addSpacing(8)
 
         self.select_all_btn = QPushButton("Select All")
         self.select_all_btn.clicked.connect(self._toggle_select_all)
@@ -1387,6 +1503,12 @@ class XeroWallpaperBrowser(QMainWindow):
 
         self.current_page = 1
         self._fetch_wallpapers()
+
+    def _do_refresh(self):
+        if self.current_source:
+            self._fetch_wallpapers()
+        else:
+            self.status_bar.showMessage("Please select a source first.")
 
     def _do_search(self):
         if self.current_source:
@@ -1599,6 +1721,10 @@ class XeroWallpaperBrowser(QMainWindow):
                                 "(Static or Live wallpapers).")
             return
         dlg = LocalBrowserDialog(static_dir, live_dir, self)
+        dlg.exec()
+
+    def _show_about(self):
+        dlg = AboutDialog(self)
         dlg.exec()
 
     def _set_wallpaper(self, filepath):

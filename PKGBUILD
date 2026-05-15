@@ -1,12 +1,13 @@
 # Maintainer: XeroLinux <xero@xerolinux.xyz>
 pkgname=xero-wallpaper-browser
-pkgver=1.0.0
+pkgver=1.2.1
 pkgrel=1
 pkgdesc="Browse, preview and download wallpapers & live wallpapers from various sources"
 arch=('any')
 url="https://github.com/xerolinux/xero-wallpaper-browser"
 license=('GPL-3.0-or-later')
 depends=(
+  'mpv'
   'python'
   'python-pyqt6'
   'python-requests'

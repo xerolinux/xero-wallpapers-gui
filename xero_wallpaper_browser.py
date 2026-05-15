@@ -18,36 +18,26 @@ os.environ.setdefault("QSG_RHI_BACKEND", "opengl")
 import re
 import json
 import hashlib
+import shutil
 import subprocess
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin, urlparse, quote
 
 import requests
 from bs4 import BeautifulSoup
-from PIL import Image
-from io import BytesIO
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QComboBox, QFileDialog,
     QScrollArea, QFrame, QProgressBar, QStatusBar, QLineEdit,
-    QCheckBox, QSplitter, QDialog, QDialogButtonBox, QSpinBox,
-    QMessageBox, QSizePolicy, QToolBar, QStyle, QMenu, QTabWidget
+    QDialog, QMessageBox, QSizePolicy, QTabWidget
 )
 from PyQt6.QtCore import (
-    Qt, QThread, pyqtSignal, QSize, QTimer, QPropertyAnimation,
-    QEasingCurve, QPoint, QRect, pyqtProperty, QObject, QUrl
+    Qt, QThread, pyqtSignal, QSize, QTimer, QPoint
 )
 from PyQt6.QtGui import (
-    QPixmap, QImage, QIcon, QPainter, QColor, QPalette, QFont,
-    QAction, QDesktopServices, QCursor, QPainterPath, QBrush, QPen
+    QPixmap, QImage, QIcon, QPainter, QColor, QCursor, QBrush, QPen
 )
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PyQt6.QtMultimediaWidgets import QVideoWidget
-
-import cv2
-import numpy as np
 
 
 HEADERS = {
@@ -116,39 +106,6 @@ class WallpaperSource:
     def fetch_wallpapers(self, page=1, search=""):
         """Return list of dicts: {thumb_url, full_url, title, resolution}"""
         raise NotImplementedError
-
-
-class DuskLinuxSource(WallpaperSource):
-    name = "DuskLinux Dark"
-    url = "https://github.com/dusklinux/images/tree/main/dark"
-    source_type = "static"
-
-    def fetch_wallpapers(self, page=1, search=""):
-        api_url = "https://api.github.com/repos/dusklinux/images/contents/dark"
-        try:
-            r = requests.get(api_url, headers=HEADERS, timeout=15)
-            r.raise_for_status()
-            items = r.json()
-            results = []
-            for item in items:
-                if item.get("type") == "file" and any(
-                    item["name"].lower().endswith(ext) for ext in
-                    (".jpg", ".jpeg", ".png", ".webp")
-                ):
-                    raw_url = item.get("download_url", "")
-                    if raw_url:
-                        results.append({
-                            "thumb_url": raw_url,
-                            "full_url": raw_url,
-                            "title": item["name"],
-                            "resolution": "",
-                        })
-            if search:
-                results = [r for r in results if search.lower() in r["title"].lower()]
-            return results
-        except Exception as e:
-            print(f"DuskLinux error: {e}")
-            return []
 
 
 class WallhavenSource(WallpaperSource):
@@ -388,95 +345,8 @@ class MotionBGsSource(WallpaperSource):
         return page_url
 
 
-class DesktopHutSource(WallpaperSource):
-    name = "DesktopHut"
-    url = "https://www.desktophut.com"
-    source_type = "live"
-
-    def fetch_wallpapers(self, page=1, search=""):
-        try:
-            if search:
-                url = f"https://www.desktophut.com/search/{quote(search)}?page={page}"
-            else:
-                url = f"https://www.desktophut.com/category/Animated-Wallpapers?page={page}"
-            r = requests.get(url, headers=HEADERS, timeout=15)
-            r.raise_for_status()
-            soup = BeautifulSoup(r.text, "html.parser")
-            results = []
-            # Find all links to /live-wallpaper/ detail pages
-            seen = set()
-            for link in soup.select("a[href*='/live-wallpaper/']"):
-                page_url = link.get("href", "")
-                if not page_url.startswith("http"):
-                    page_url = urljoin("https://www.desktophut.com", page_url)
-                # Skip download links and duplicates
-                if "/download" in page_url or page_url in seen:
-                    continue
-                seen.add(page_url)
-                # Title from link text or slug
-                title = link.get_text(strip=True)
-                if not title:
-                    slug = page_url.rstrip("/").split("/")[-1]
-                    title = slug.replace("-", " ").title()
-                # Thumbnails are JS-loaded; try to find nearby img
-                img = link.select_one("img")
-                thumb = ""
-                if img:
-                    thumb = img.get("src") or img.get("data-src") or ""
-                    if thumb and not thumb.startswith("http"):
-                        thumb = urljoin("https://www.desktophut.com", thumb)
-                    # Skip SVG placeholders
-                    if "svg" in thumb.lower() or "data:" in thumb.lower():
-                        thumb = ""
-                results.append({
-                    "thumb_url": thumb,
-                    "full_url": page_url,
-                    "title": title,
-                    "resolution": "",
-                    "page_url": page_url,
-                    "needs_resolve": True,
-                })
-            return results
-        except Exception as e:
-            print(f"DesktopHut error: {e}")
-            return []
-
-    def resolve_download_url(self, page_url):
-        """Get thumbnail and download URL from detail page."""
-        try:
-            r = requests.get(page_url, headers=HEADERS, timeout=15)
-            r.raise_for_status()
-            soup = BeautifulSoup(r.text, "html.parser")
-            # Direct download link: /live-wallpaper/{slug}/download
-            download_url = page_url.rstrip("/") + "/download"
-            return download_url
-        except Exception as e:
-            print(f"DesktopHut resolve error: {e}")
-        return page_url
-
-    def get_detail_thumb(self, page_url):
-        """Fetch thumbnail from detail page (for lazy-loaded listings)."""
-        try:
-            r = requests.get(page_url, headers=HEADERS, timeout=15)
-            r.raise_for_status()
-            soup = BeautifulSoup(r.text, "html.parser")
-            # Look for thumbnail in uploads/thumbnails
-            for img in soup.select("img[src*='/uploads/thumbnails/']"):
-                src = img["src"]
-                if not src.startswith("http"):
-                    src = urljoin("https://www.desktophut.com", src)
-                return src
-            # Fallback: og:image meta
-            og = soup.select_one("meta[property='og:image']")
-            if og and og.get("content"):
-                return og["content"]
-        except Exception:
-            pass
-        return ""
-
-
-STATIC_SOURCES = [DuskLinuxSource(), WallhavenSource(), FourKWallpapersSource()]
-LIVE_SOURCES = [MoeWallsSource(), MotionBGsSource(), DesktopHutSource()]
+STATIC_SOURCES = [WallhavenSource(), FourKWallpapersSource()]
+LIVE_SOURCES = [MoeWallsSource(), MotionBGsSource()]
 
 
 # ---------------------------------------------------------------------------
@@ -509,13 +379,20 @@ class ThumbnailWorker(QThread):
         self.index = index
         self.url = url
         self.size = size
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
 
     def run(self):
+        if self._cancelled:
+            return
         data = cached_download(self.url)
-        if data:
-            px = bytes_to_qpixmap(data, self.size)
-            if px:
-                self.thumbnail_ready.emit(self.index, px)
+        if self._cancelled or not data:
+            return
+        px = bytes_to_qpixmap(data, self.size)
+        if px and not self._cancelled:
+            self.thumbnail_ready.emit(self.index, px)
 
 
 class LocalThumbnailWorker(QThread):
@@ -526,22 +403,28 @@ class LocalThumbnailWorker(QThread):
         self.index = index
         self.filepath = filepath
         self.size = size
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
 
     def run(self):
+        if self._cancelled:
+            return
         try:
             img = QImage(self.filepath)
-            if not img.isNull():
+            if not img.isNull() and not self._cancelled:
                 px = QPixmap.fromImage(img)
                 if self.size:
                     px = px.scaled(self.size, Qt.AspectRatioMode.KeepAspectRatio,
                                    Qt.TransformationMode.SmoothTransformation)
-                self.thumbnail_ready.emit(self.index, px)
+                if not self._cancelled:
+                    self.thumbnail_ready.emit(self.index, px)
         except Exception:
             pass
 
 
 class VideoThumbnailWorker(QThread):
-    """Extract a thumbnail frame from a video file using OpenCV."""
     thumbnail_ready = pyqtSignal(int, QPixmap)
 
     def __init__(self, index, filepath, size):
@@ -549,68 +432,40 @@ class VideoThumbnailWorker(QThread):
         self.index = index
         self.filepath = filepath
         self.size = size
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
 
     def run(self):
+        if self._cancelled:
+            return
         try:
-            cap = cv2.VideoCapture(self.filepath)
-            if not cap.isOpened():
+            result = subprocess.run(
+                ["ffmpeg", "-ss", "00:00:02", "-i", self.filepath,
+                 "-vframes", "1", "-f", "image2", "-vcodec", "png", "pipe:1"],
+                capture_output=True, timeout=15
+            )
+            if not result.stdout or self._cancelled:
                 return
-            # Seek to 25% of video for a representative frame
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            if total_frames > 10:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames // 4)
-            ret, frame = cap.read()
-            cap.release()
-            if not ret or frame is None:
+            px = bytes_to_qpixmap(result.stdout, self.size)
+            if not px or self._cancelled:
                 return
-            # Convert BGR to RGB
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w, ch = frame.shape
-            img = QImage(frame.data, w, h, ch * w, QImage.Format.Format_RGB888)
-            px = QPixmap.fromImage(img)
-            if self.size:
-                px = px.scaled(self.size, Qt.AspectRatioMode.KeepAspectRatio,
-                               Qt.TransformationMode.SmoothTransformation)
-            # Draw a play button overlay
             painter = QPainter(px)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             cx, cy = px.width() // 2, px.height() // 2
-            # Semi-transparent circle
             painter.setBrush(QBrush(QColor(0, 0, 0, 140)))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(QPoint(cx, cy), 22, 22)
-            # White triangle
             painter.setBrush(QBrush(QColor(255, 255, 255, 220)))
             triangle = [QPoint(cx - 8, cy - 12), QPoint(cx - 8, cy + 12), QPoint(cx + 14, cy)]
             painter.drawPolygon(triangle)
             painter.end()
-            self.thumbnail_ready.emit(self.index, px)
+            if not self._cancelled:
+                self.thumbnail_ready.emit(self.index, px)
         except Exception:
             pass
 
-
-class DetailThumbWorker(QThread):
-    """Fetch thumbnail from a detail page (for sites with JS-loaded listings)."""
-    thumbnail_ready = pyqtSignal(int, QPixmap)
-
-    def __init__(self, index, source, page_url, size):
-        super().__init__()
-        self.index = index
-        self.source = source
-        self.page_url = page_url
-        self.size = size
-
-    def run(self):
-        try:
-            thumb_url = self.source.get_detail_thumb(self.page_url)
-            if thumb_url:
-                data = cached_download(thumb_url)
-                if data:
-                    px = bytes_to_qpixmap(data, self.size)
-                    if px:
-                        self.thumbnail_ready.emit(self.index, px)
-        except Exception:
-            pass
 
 
 class DownloadWorker(QThread):
@@ -785,10 +640,11 @@ class PreviewDialog(QDialog):
         self.setWindowTitle(item.get("title", "Preview"))
         self.setMinimumSize(800, 600)
         self.item = item
+        self._load_thread = None
 
         layout = QVBoxLayout(self)
 
-        self.image_label = QLabel("Loading full resolution...")
+        self.image_label = QLabel("Loading preview...")
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(self.image_label)
@@ -808,20 +664,39 @@ class PreviewDialog(QDialog):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
-        self.load_thread = ThumbnailWorker(0, item["full_url"], QSize(1200, 900))
-        self.load_thread.thumbnail_ready.connect(self._on_loaded)
-        self.load_thread.start()
+        # Show cached thumbnail immediately while full-res loads
+        thumb_url = item.get("thumb_url", "")
+        if thumb_url:
+            thumb_hash = hashlib.md5(thumb_url.encode()).hexdigest()
+            cache_path = CACHE_DIR / thumb_hash
+            if cache_path.exists():
+                px = bytes_to_qpixmap(cache_path.read_bytes(), QSize(1200, 900))
+                if px:
+                    self.image_label.setPixmap(px)
+                    self.image_label.setText("")
+
+        self._load_thread = ThumbnailWorker(0, item["full_url"], QSize(1200, 900))
+        self._load_thread.thumbnail_ready.connect(self._on_loaded)
+        self._load_thread.start()
 
     def _on_loaded(self, _, pixmap):
+        if not self.isVisible():
+            return
         self.image_label.setPixmap(pixmap.scaled(
-            self.image_label.size(),
+            self.image_label.size().expandedTo(QSize(400, 300)),
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation
         ))
 
+    def closeEvent(self, event):
+        if self._load_thread and self._load_thread.isRunning():
+            self._load_thread.cancel()
+            self._load_thread.wait(2000)
+        super().closeEvent(event)
+
 
 class LocalPreviewDialog(QDialog):
-    """Preview a local image or video file with option to set as wallpaper."""
+    """Preview a local image file with option to set as wallpaper."""
 
     def __init__(self, filepath, parent=None):
         super().__init__(parent)
@@ -829,163 +704,47 @@ class LocalPreviewDialog(QDialog):
         self.setWindowTitle(os.path.basename(filepath))
         self.setMinimumSize(900, 650)
         self.resize(1000, 720)
-        self._is_video = any(filepath.lower().endswith(ext)
-                             for ext in (".mp4", ".webm", ".mkv", ".avi"))
 
         layout = QVBoxLayout(self)
 
-        if self._is_video:
-            self._build_video_preview(layout)
-        else:
-            self._build_image_preview(layout)
-
-        # Info label
-        info = QLabel(os.path.basename(filepath))
-        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(info)
-
-        # Buttons
-        btn_layout = QHBoxLayout()
-        btn_style = """
-            QPushButton {
-                background-color: #5b8bd4;
-                color: white;
-                border: none;
-                padding: 6px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #4a7bc3; }
-        """
-        if not self._is_video:
-            set_btn = QPushButton("Set as Wallpaper")
-            set_btn.setStyleSheet(btn_style)
-            set_btn.clicked.connect(self.accept)
-            btn_layout.addStretch()
-            btn_layout.addWidget(set_btn)
-        else:
-            btn_layout.addStretch()
-
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self._close)
-        btn_layout.addWidget(close_btn)
-        btn_layout.addStretch()
-        layout.addLayout(btn_layout)
-
-    def _build_image_preview(self, layout):
-        self.image_label = QLabel()
+        self.image_label = QLabel("Loading...")
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(self.image_label)
 
-        px = QPixmap(self.filepath)
-        if not px.isNull():
-            self.image_label.setPixmap(px.scaled(
-                QSize(1100, 800),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            ))
+        info = QLabel(os.path.basename(filepath))
+        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(info)
 
-    def _build_video_preview(self, layout):
-        # Info note
-        note = QLabel("Live wallpapers must be set using your preferred live wallpaper tool "
-                       "(e.g. Komorebi, Hidamari, xwinwrap, mpvpaper)")
-        note.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        note.setWordWrap(True)
-        note.setStyleSheet("color: #e8a035; font-size: 11px; font-weight: bold; padding: 4px 0;")
-        layout.addWidget(note)
+        btn_layout = QHBoxLayout()
+        set_btn = QPushButton("Set as Wallpaper")
+        set_btn.setStyleSheet(
+            "QPushButton { background-color: #5b8bd4; color: white; border: none;"
+            " padding: 6px 16px; border-radius: 4px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #4a7bc3; }"
+        )
+        set_btn.clicked.connect(self.accept)
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.reject)
+        btn_layout.addStretch()
+        btn_layout.addWidget(set_btn)
+        btn_layout.addWidget(close_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
 
-        # Video player
-        self.video_widget = QVideoWidget()
-        self.video_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        layout.addWidget(self.video_widget)
+        self._img_worker = LocalThumbnailWorker(0, self.filepath, QSize(1100, 800))
+        self._img_worker.thumbnail_ready.connect(self._on_loaded)
+        self._img_worker.start()
 
-        self.media_player = QMediaPlayer()
-        self.audio_output = QAudioOutput()
-        self.media_player.setAudioOutput(self.audio_output)
-        self.media_player.setVideoOutput(self.video_widget)
-        self.audio_output.setVolume(0.5)
-
-        # Transport controls
-        transport = QHBoxLayout()
-
-        self.play_btn = QPushButton("▶ Play")
-        self.play_btn.clicked.connect(self._toggle_play)
-        transport.addWidget(self.play_btn)
-
-        self.stop_btn = QPushButton("⏹ Stop")
-        self.stop_btn.clicked.connect(self._stop)
-        transport.addWidget(self.stop_btn)
-
-        self.position_label = QLabel("0:00 / 0:00")
-        transport.addWidget(self.position_label)
-
-        transport.addStretch()
-
-        vol_label = QLabel("Vol:")
-        transport.addWidget(vol_label)
-        self.vol_slider = QSpinBox()
-        self.vol_slider.setRange(0, 100)
-        self.vol_slider.setValue(50)
-        self.vol_slider.setSuffix("%")
-        self.vol_slider.valueChanged.connect(lambda v: self.audio_output.setVolume(v / 100.0))
-        transport.addWidget(self.vol_slider)
-
-        self.loop_btn = QPushButton("🔁 Loop")
-        self.loop_btn.setCheckable(True)
-        self.loop_btn.setChecked(True)
-        transport.addWidget(self.loop_btn)
-
-        layout.addLayout(transport)
-
-        # Connect signals
-        self.media_player.positionChanged.connect(self._on_position_changed)
-        self.media_player.durationChanged.connect(self._on_duration_changed)
-        self.media_player.mediaStatusChanged.connect(self._on_media_status)
-        self._duration = 0
-
-        # Load and auto-play
-        self.media_player.setSource(QUrl.fromLocalFile(self.filepath))
-        QTimer.singleShot(300, lambda: self.media_player.play())
-
-    def _toggle_play(self):
-        if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self.media_player.pause()
-            self.play_btn.setText("▶ Play")
-        else:
-            self.media_player.play()
-            self.play_btn.setText("⏸ Pause")
-
-    def _stop(self):
-        self.media_player.stop()
-        self.play_btn.setText("▶ Play")
-
-    def _on_position_changed(self, pos):
-        cur = self._format_time(pos)
-        total = self._format_time(self._duration)
-        self.position_label.setText(f"{cur} / {total}")
-
-    def _on_duration_changed(self, dur):
-        self._duration = dur
-
-    def _on_media_status(self, status):
-        if status == QMediaPlayer.MediaStatus.EndOfMedia and self.loop_btn.isChecked():
-            self.media_player.setPosition(0)
-            self.media_player.play()
-
-    @staticmethod
-    def _format_time(ms):
-        s = ms // 1000
-        return f"{s // 60}:{s % 60:02d}"
-
-    def _close(self):
-        if self._is_video:
-            self.media_player.stop()
-        self.reject()
+    def _on_loaded(self, _, px):
+        if self.isVisible():
+            self.image_label.setPixmap(px)
+            self.image_label.setText("")
 
     def closeEvent(self, event):
-        if self._is_video:
-            self.media_player.stop()
+        if self._img_worker.isRunning():
+            self._img_worker.cancel()
+            self._img_worker.wait(1000)
         super().closeEvent(event)
 
 
@@ -996,12 +755,16 @@ class LocalPreviewDialog(QDialog):
 class LocalBrowserTab(QWidget):
     """A single tab for browsing local wallpapers of one type."""
 
+    _MAX_CONCURRENT = 4
+
     def __init__(self, folder, file_type, parent_dialog, parent=None):
         super().__init__(parent)
         self.folder = folder
         self.file_type = file_type
         self.parent_dialog = parent_dialog
         self.thumb_workers = []
+        self._pending_workers = []
+        self._active_count = 0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
@@ -1062,14 +825,26 @@ class LocalBrowserTab(QWidget):
             is_video = any(filepath.lower().endswith(ext) for ext in (".mp4", ".webm", ".mkv", ".avi"))
             if is_image:
                 worker = LocalThumbnailWorker(i, filepath, QSize(208, 140))
-                worker.thumbnail_ready.connect(lambda idx, px: self._set_thumb(idx, px))
-                self.thumb_workers.append(worker)
-                worker.start()
+                worker.thumbnail_ready.connect(self._set_thumb)
+                self._pending_workers.append(worker)
             elif is_video:
                 worker = VideoThumbnailWorker(i, filepath, QSize(208, 140))
-                worker.thumbnail_ready.connect(lambda idx, px: self._set_thumb(idx, px))
-                self.thumb_workers.append(worker)
-                worker.start()
+                worker.thumbnail_ready.connect(self._set_thumb)
+                self._pending_workers.append(worker)
+
+        self._drain_queue()
+
+    def _drain_queue(self):
+        while self._active_count < self._MAX_CONCURRENT and self._pending_workers:
+            worker = self._pending_workers.pop(0)
+            self.thumb_workers.append(worker)
+            worker.finished.connect(self._on_worker_finished)
+            self._active_count += 1
+            worker.start()
+
+    def _on_worker_finished(self):
+        self._active_count = max(0, self._active_count - 1)
+        self._drain_queue()
 
     def _set_thumb(self, index, pixmap):
         for i in range(self.grid_layout.count()):
@@ -1078,10 +853,32 @@ class LocalBrowserTab(QWidget):
                 widget.set_thumbnail(pixmap)
                 break
 
+    def cancel_all_workers(self):
+        for w in self._pending_workers:
+            w.cancel()
+        self._pending_workers.clear()
+        for w in self.thumb_workers:
+            w.cancel()
+
     def _on_double_click(self, filepath):
+        is_video = filepath.lower().endswith((".mp4", ".webm", ".mkv", ".avi"))
+        if is_video:
+            for player in ["mpv", "vlc", "celluloid", "totem", "xdg-open"]:
+                if shutil.which(player):
+                    if player == "mpv":
+                        cmd = ["mpv", "--geometry=1280x720", "--autofit=1280x720",
+                               "--title=Live Wallpaper Preview", "--loop=inf", filepath]
+                    elif player == "vlc":
+                        cmd = ["vlc", "--width=1280", "--height=720", filepath]
+                    else:
+                        cmd = [player, filepath]
+                    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+            QMessageBox.information(self, "No Player Found",
+                                    f"No video player found (tried mpv, vlc, celluloid, totem).\n\nFile:\n{filepath}")
+            return
         dlg = LocalPreviewDialog(filepath, self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            # Only images return Accepted (set as wallpaper)
             self.parent_dialog.set_wallpaper(filepath)
 
 
@@ -1116,8 +913,14 @@ class LocalBrowserDialog(QDialog):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
+    def closeEvent(self, event):
+        for i in range(self.tabs.count()):
+            tab = self.tabs.widget(i)
+            if isinstance(tab, LocalBrowserTab):
+                tab.cancel_all_workers()
+        super().closeEvent(event)
+
     def set_wallpaper(self, filepath):
-        """Delegate to main window's wallpaper setter."""
         if self.main_window and hasattr(self.main_window, "_set_wallpaper"):
             self.main_window._set_wallpaper(filepath)
 
@@ -1326,10 +1129,19 @@ class XeroWallpaperBrowser(QMainWindow):
         page_row.addWidget(self.next_btn)
         main_layout.addLayout(page_row)
 
+        credit_label = QLabel('App Created by <a href="https://xerolinux.xyz/" style="color: #7aa2f7; text-decoration: none;"><b>DarkXero</b></a>')
+        credit_label.setOpenExternalLinks(True)
+        credit_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        credit_label.setStyleSheet("font-size: 11px; padding: 4px 0;")
+        main_layout.addWidget(credit_label)
+
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Set your download folders and select a source to begin.")
+        hint_label = QLabel("Tip: Ctrl+Click to select multiple wallpapers")
+        hint_label.setStyleSheet("color: gray; font-size: 11px; padding-right: 6px;")
+        self.status_bar.addPermanentWidget(hint_label)
 
         # Welcome message in grid
         welcome = QLabel(
@@ -1403,10 +1215,8 @@ class XeroWallpaperBrowser(QMainWindow):
         self.selected_indices.clear()
         self._update_selection_ui()
 
-        # Stop previous workers
         for w in self.thumb_workers:
-            if w.isRunning():
-                w.quit()
+            w.cancel()
         self.thumb_workers.clear()
 
         self.fetch_worker = FetchWorker(
@@ -1453,12 +1263,6 @@ class XeroWallpaperBrowser(QMainWindow):
             # Load thumbnail
             if wp.get("thumb_url"):
                 worker = ThumbnailWorker(i, wp["thumb_url"], QSize(208, 140))
-                worker.thumbnail_ready.connect(self._on_thumbnail_ready)
-                self.thumb_workers.append(worker)
-                worker.start()
-            elif wp.get("page_url") and self.current_source and hasattr(self.current_source, "get_detail_thumb"):
-                # Fetch thumbnail from detail page (e.g. DesktopHut)
-                worker = DetailThumbWorker(i, self.current_source, wp["page_url"], QSize(208, 140))
                 worker.thumbnail_ready.connect(self._on_thumbnail_ready)
                 self.thumb_workers.append(worker)
                 worker.start()
@@ -1509,11 +1313,10 @@ class XeroWallpaperBrowser(QMainWindow):
                     self._update_selection_ui()
                     self._download_selected()
             else:
-                # For live wallpapers, just select for download
                 self.selected_indices = {index}
                 self._update_card_selections()
                 self._update_selection_ui()
-                self._download_selected()
+                self.status_bar.showMessage("Selected — click ⬇ Download to save.")
 
     def _update_card_selections(self):
         for i in range(self.grid_layout.count()):
@@ -1636,9 +1439,8 @@ class XeroWallpaperBrowser(QMainWindow):
             cmd = ["swaybg", "-i", filepath, "-m", "fill"]
 
         if not cmd:
-            # Fallback: try feh, nitrogen, or notify user
             for tool in ["feh", "nitrogen"]:
-                if os.system(f"which {tool} > /dev/null 2>&1") == 0:
+                if shutil.which(tool):
                     if tool == "feh":
                         cmd = ["feh", "--bg-fill", filepath]
                     else:

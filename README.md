@@ -1,155 +1,51 @@
 <p align="center">
-  <img src="xero_logo.png" alt="Xero Logo" width="120">
+  <img src="xero_logo.png" alt="Xero Wallpapers logo" width="120">
 </p>
 
-<h1 align="center">Xero Wallpaper Browser & Downloader</h1>
+<h1 align="center">Xero Wallpapers</h1>
 
 <p align="center">
-  <strong>Browse, preview and download wallpapers & live wallpapers from multiple online sources — all from one app.</strong>
+  <img src="assets/demo.gif" alt="Xero Wallpapers in action" width="960">
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Platform-Linux-blue?style=flat-square&logo=linux&logoColor=white" alt="Linux">
-  <img src="https://img.shields.io/badge/Python-3.10+-yellow?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/Toolkit-PyQt6-green?style=flat-square&logo=qt&logoColor=white" alt="PyQt6">
-  <img src="https://img.shields.io/badge/License-GPL--3.0-red?style=flat-square" alt="GPL-3.0">
-</p>
+Xero Wallpapers is a KDE Plasma app for finding, previewing and setting wallpapers. Browse Wallhaven and 4K Wallpapers (plus MoeWalls and MotionBGs for live wallpapers), filter by tags, colour, resolution and aspect ratio, flip through results in a fullscreen coverflow, crop and upscale images, and keep everything in a local library. On Plasma it can also rotate your wallpapers with its own slideshow plugin and play live wallpapers through Smart Video Wallpaper Reborn. It is built with PyQt6, QML and Kirigami, and is always dark: it follows your Plasma colour scheme when it's dark; light schemes are replaced by Layan.
 
-<p align="center">
-
-<img src="GUI.webp" alt="App">
-
-</p>
-
----
-
-## Features
-
-### Wallpaper Sources
-
-**Static Wallpapers**
-- [DuskLinux Dark](https://github.com/dusklinux/images/tree/main/dark) — Curated dark wallpaper collection via GitHub API
-- [Wallhaven](https://wallhaven.cc) — Massive wallpaper library with API search
-- [4K Wallpapers](https://4kwallpapers.com) — High-resolution wallpapers up to 8K, auto-picks highest resolution
-
-**Live Wallpapers**
-- [MoeWalls](https://moewalls.com) — Animated/video wallpapers
-- [MotionBGs](https://motionbgs.com) — Live desktop backgrounds with 4K/HD download options
-- [DesktopHut](https://www.desktophut.com) — Animated wallpaper collection
-
-### Browsing & Selection
-
-- Thumbnail grid with lazy-loading and disk caching
-- Search across all sources
-- Pagination support
-- Click to select, **Ctrl+Click** to toggle, **Shift+Click** for range select
-- Select All / Deselect All
-- Double-click to preview full resolution
-
-### Downloading
-
-- Separate download folders for Static and Live wallpapers
-- Batch download with progress bar
-- Auto-resolves highest quality download links
-- Smart file naming with duplicate avoidance
-
-### Local Browser
-
-- **Browse Downloaded** button opens a tabbed dialog (Static / Live tabs)
-- Video thumbnails extracted from actual video frames (via OpenCV) with play button overlay
-- Image thumbnails loaded natively
-
-### In-App Preview
-
-- **Images** — Full-resolution preview with **Set as Wallpaper** button
-- **Videos** — Embedded video player with play/pause, stop, loop, volume controls — no external tools needed
-
-### Set as Wallpaper
-
-Auto-detects your desktop environment and applies the wallpaper:
-
-| Desktop | Method |
-|---------|--------|
-| KDE Plasma | `plasma-apply-wallpaperimage` |
-| GNOME | `gsettings` (picture-uri-dark) |
-| XFCE | `xfconf-query` |
-| MATE | `gsettings` (org.mate) |
-| Cinnamon | `gsettings` (org.cinnamon) |
-| Hyprland / Sway | `swaybg` |
-| Fallback | `feh` or `nitrogen` |
-
-> Live wallpapers must be set using your preferred tool (e.g. Komorebi, Hidamari, xwinwrap, mpvpaper).
-
-### UI
-
-- Uses system theme — looks native on any DE
-- Glowing orange status notes and guidance text
-- Bold instructional welcome screen for first-time users
-- Responsive grid layout that adapts to window size
-
----
-
-## Usage From Source
-
-**Dependencies:**
+## Install on XeroLinux
 
 ```bash
-sudo pacman -S python-pyqt6 python-requests python-beautifulsoup4 python-pillow python-opencv python-numpy qt6-multimedia qt6-multimedia-gstreamer gst-plugins-good gst-plugins-bad gst-libav
+sudo pacman -S xero-wallpaper-browser
 ```
 
-**Clone Repo:**
+## Other distros
+
+**AppImage**: download `Xero_Wallpapers-<version>-<arch>.AppImage` (x86_64 or aarch64) from [Releases](https://github.com/xerolinux/xero-wallpapers-gui/releases), make it executable and run it. It updates itself: when a newer release is out, an "Update to <version>" button appears at the top right, and the app restarts on the new version. Browsing, downloading, editing and the library work on any desktop. Live wallpapers, the slideshow plugin and Smart Video Wallpaper Reborn need KDE Plasma (with `kpackagetool6` and `qdbus6` installed on the system).
+
+To [run from source](#run-from-source) instead, install the dependencies first.
+
+**Fedora**
 
 ```bash
-git clone https://github.com/xerolinux/xero-wallpapers-gui
+sudo dnf install python3-pyqt6 qt6-qtdeclarative qt6-qtmultimedia qt6-qtimageformats kf6-kirigami kf6-qqc2-desktop-style breeze-icon-theme python3-requests python3-beautifulsoup4 python3-pillow
 ```
 
-**Run:**
+**openSUSE Tumbleweed**
 
 ```bash
-cd xero-wallpapers-gui/
-python3 xero_wallpaper_browser.py
+sudo zypper install python3-PyQt6 qt6-declarative-imports qt6-multimedia-imports qt6-imageformats kf6-kirigami-imports kf6-qqc2-desktop-style kf6-breeze-icons python3-requests python3-beautifulsoup4 python3-Pillow
 ```
 
----
+**Debian 13 / Ubuntu 25.04 and newer**
 
-## Configuration
+```bash
+sudo apt install python3-pyqt6 python3-pyqt6.qtqml python3-pyqt6.qtquick qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs qml6-module-qtquick-effects qml6-module-qtquick-templates qml6-module-qtqml-workerscript qml6-module-qtmultimedia qml6-module-qt-labs-folderlistmodel qml6-module-org-kde-kirigami qml6-module-org-kde-desktop qt6-image-formats-plugins breeze-icon-theme python3-requests python3-bs4 python3-pil
+```
 
-Settings are stored at `~/.config/xero-wallpaper-browser/config.json`:
+Optional on every distro: `vulkan-tools` (finds a dedicated GPU for AI upscaling).
 
-| Key | Description |
-|-----|-------------|
-| `static_download_dir` | Download folder for static wallpapers |
-| `live_download_dir` | Download folder for live wallpapers |
+## Credits
 
-Thumbnail cache is stored at `~/.cache/xero-wallpaper-browser/`.
-
----
-
-## Version History
-
-### v1.0.0 — Initial Release
-
-- **Core app** — PyQt6 GUI with system theme integration
-- **6 wallpaper sources** — 3 static (DuskLinux, Wallhaven, 4K Wallpapers) + 3 live (MoeWalls, MotionBGs, DesktopHut)
-- **Thumbnail grid** — Lazy-loaded with disk cache, responsive layout
-- **Multi-select & batch download** — Click, Ctrl+Click, Shift+Click, Select All
-- **Separate download folders** — Independent paths for static and live wallpapers
-- **Search & pagination** — Across all sources
-- **Local browser** — Tabbed dialog to browse downloaded wallpapers
-- **Video thumbnails** — Extracted from video frames via OpenCV with play overlay
-- **In-app video player** — Embedded QMediaPlayer with full transport controls (play/pause, stop, loop, volume)
-- **In-app image preview** — Full-resolution with Set as Wallpaper
-- **Set as wallpaper** — Auto-detects DE (KDE, GNOME, XFCE, MATE, Cinnamon, Hyprland/Sway, feh, nitrogen)
-- **Arch Linux packaging** — PKGBUILD with .desktop entry and icon
-
----
+The bundled fallback colour scheme `xero_wallpapers/data/Layan.colors` is from [Layan](https://github.com/vinceliuice/Layan-kde) by vinceliuice (GPL-3.0).
 
 ## License
 
-This project is licensed under the [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html) License.
-
----
-
-<p align="center">
-  Made with care for the <a href="https://xerolinux.xyz">XeroLinux</a> community
-</p>
+[GPL-3.0](LICENSE)

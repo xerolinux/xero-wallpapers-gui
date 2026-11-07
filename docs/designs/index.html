@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xero Wallpapers Designs</title>
+<style>
+:root{--bg:#1b1e20;--surface:#232629;--border:#3b4045;--text:#fcfcfc;--dim:#a1a9b1;--accent:#3daee9}
+@media (prefers-color-scheme:light){:root{--bg:#eff0f1;--surface:#fff;--border:#d1d5d9;--text:#232629;--dim:#6e7a86;--accent:#2c8fd6}}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.45 "Noto Sans",system-ui,sans-serif;padding:28px 16px 60px}
+header{max-width:1500px;margin:0 auto 22px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between}
+h1{font-size:24px}
+header p{color:var(--dim);max-width:640px}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;padding:5px 12px;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer}
+button.on{background:var(--accent);border-color:transparent;color:#fff}
+main{max-width:1500px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+figure{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:zoom-in}
+figure img{display:block;width:100%;aspect-ratio:8/5;object-fit:cover;background:#000}
+figcaption{padding:10px 12px;display:flex;gap:10px;align-items:baseline}
+figcaption b{color:var(--accent);font-variant-numeric:tabular-nums}
+figcaption small{color:var(--dim);margin-left:auto;text-align:right}
+.pick{max-width:1500px;margin:0 auto 30px}
+.pick h2{font-size:17px;margin-bottom:12px}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px}
+dialog{border:0;padding:0;background:transparent;max-width:96vw}
+dialog::backdrop{background:rgba(0,0,0,.85)}
+dialog img{display:block;max-width:96vw;max-height:88vh;border-radius:8px}
+dialog p{color:#fff;text-align:center;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Xero Wallpapers: 36 design directions</h1>
+  <p>6 layouts × 6 themes. Each GIF walks through all 9 pages: launch, details, crop &amp; upscale, fullscreen coverflow, custom sources, download folders, live wallpapers with SVWR, live grid, library. Click one to view it large.</p></div>
+  <div><div class="filters" id="fl"></div><div class="filters" id="ft" style="margin-top:6px"></div></div>
+</header>
+<section class="pick"><h2>Chosen: #22 Immersive · Frost</h2>
+  <div class="pair"><figure data-src="gifs/22-immersive-frost.gif" data-cap="#22 main walkthrough"><img src="gifs/22-immersive-frost.gif" alt="Design 22 main walkthrough"><figcaption><span>Main walkthrough (9 pages)</span></figcaption></figure>
+  <figure data-src="gifs/22-immersive-frost-extras.gif" data-cap="#22 extras: first-run, sort &amp; filter, SVWR update, about"><img src="gifs/22-immersive-frost-extras.gif" alt="Design 22 extras walkthrough"><figcaption><span>Extras: first-run, sort &amp; filter, SVWR update, About</span></figcaption></figure></div></section>
+<main id="g"></main>
+<dialog id="dlg"><img id="big" alt=""><p id="cap"></p></dialog>
+<script>
+const LAYOUTS=[['sidebar','Sidebar'],['tabbed','Tabbed'],['glass','Glass'],['immersive','Immersive'],['split','Split View'],['rail','Rail']];
+const THEMES=[['breeze-dark','Breeze Dark'],['breeze-light','Breeze Light'],['xero-night','Xero Night'],['frost','Frost'],['ember-light','Ember Light'],['graphite','OLED Graphite']];
+const CARDS=['tile','bleed','frame','big'];
+const COVERS=['3D tilt','flat carousel','depth stack','arc wheel','fanned deck','filmstrip'];
+const items=[];
+LAYOUTS.forEach(([lid,ln],l)=>THEMES.forEach(([tid,tn],t)=>{const n=l*6+t+1;
+  items.push({n,l:lid,t:tid,name:`${ln} · ${tn}`,src:`gifs/${String(n).padStart(2,'0')}-${lid}-${tid}.gif`,extra:`${CARDS[(l*2+t)%4]} cards · ${COVERS[(l+t)%6]}`})}));
+const f={l:null,t:null};
+function chips(el,list,key){el.innerHTML=`<button class="on" data-v="">All</button>`+list.map(([id,n])=>`<button data-v="${id}">${n}</button>`).join('');
+  el.onclick=e=>{const b=e.target.closest('button');if(!b)return;f[key]=b.dataset.v||null;el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));draw()}}
+function draw(){document.getElementById('g').innerHTML=items.filter(i=>(!f.l||i.l===f.l)&&(!f.t||i.t===f.t)).map(i=>
+  `<figure data-n="${i.n}"><img loading="lazy" src="${i.src}" alt="Design ${i.n}: ${i.name}"><figcaption><b>${String(i.n).padStart(2,'0')}</b><span>${i.name}</span><small>${i.extra}</small></figcaption></figure>`).join('')}
+chips(document.getElementById('fl'),LAYOUTS,'l');chips(document.getElementById('ft'),THEMES,'t');draw();
+const dlg=document.getElementById('dlg');
+document.getElementById('g').onclick=e=>{const fig=e.target.closest('figure');if(!fig)return;const i=items[fig.dataset.n-1];
+  document.getElementById('big').src=i.src;document.getElementById('cap').textContent=`#${i.n} ${i.name} · ${i.extra}`;dlg.showModal()};
+document.querySelector('.pick').onclick=e=>{const fig=e.target.closest('figure');if(!fig)return;
+  document.getElementById('big').src=fig.dataset.src;document.getElementById('cap').textContent=fig.dataset.cap;dlg.showModal()};
+dlg.onclick=()=>dlg.close();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=Xero Wallpaper Browser
-Comment=Browse, preview and download wallpapers & live wallpapers from various sources
+Name=Xero Wallpapers
+Comment=Browse, preview, upscale and set wallpapers and live wallpapers on KDE Plasma
 Exec=xero-wallpaper-browser
 Icon=xero-wallpaper-browser
 Terminal=false

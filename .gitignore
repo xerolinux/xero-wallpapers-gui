@@ -1,5 +1,20 @@
 /target
 push.sh
 CLAUDE.md
+__pycache__/
+.pytest_cache/
+.superpowers/
+docs/designs/gifs/
+
+# makepkg
+/src/
+/pkg/
 Packaging/src/
 Packaging/pkg/
+*.pkg.tar.*
+
+# AppImage builds
+/build/
+/dist/
+*.AppImage
+*.zsync

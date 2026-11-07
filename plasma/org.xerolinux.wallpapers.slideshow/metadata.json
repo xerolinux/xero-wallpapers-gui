@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "XeroLinux"
+            }
+        ],
+        "Category": "",
+        "Description": "Slideshow wallpaper with transitions, managed by Xero Wallpapers",
+        "Icon": "folder-image",
+        "Id": "org.xerolinux.wallpapers.slideshow",
+        "License": "GPL-3.0-or-later",
+        "Name": "Xero Slideshow",
+        "Version": "1.0.0",
+        "Website": "https://github.com/xerolinux/xero-wallpapers-gui"
+    },
+    "X-KDE-ParentApp": "org.kde.plasmashell",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

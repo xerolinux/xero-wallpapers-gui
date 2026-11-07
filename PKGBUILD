@@ -1,25 +1,33 @@
 # Maintainer: XeroLinux <xero@xerolinux.xyz>
 pkgname=xero-wallpaper-browser
-pkgver=1.2.1
+pkgver=2.0.0
 pkgrel=1
-pkgdesc="Browse, preview and download wallpapers & live wallpapers from various sources"
+pkgdesc="Browse, preview, upscale and set wallpapers and live wallpapers on KDE Plasma"
 arch=('any')
-url="https://github.com/xerolinux/xero-wallpaper-browser"
+url="https://github.com/xerolinux/xero-wallpapers-gui"
 license=('GPL-3.0-or-later')
 depends=(
-  'mpv'
   'python'
   'python-pyqt6'
-  'python-requests'
-  'python-beautifulsoup4'
-  'python-pillow'
-  'python-opencv'
-  'python-numpy'
+  'qt6-declarative'
   'qt6-multimedia'
-  'qt6-multimedia-gstreamer'
-  'gst-plugins-good'
-  'gst-plugins-bad'
-  'gst-libav'
+  'qt6-multimedia-ffmpeg'
+  'qt6-imageformats'
+  'kirigami'
+  'qqc2-desktop-style'
+  'breeze-icons'
+  'python-requests'
+  'python-urllib3'
+  'python-beautifulsoup4'
+  'python-soupsieve'
+  'python-pillow'
+)
+optdepends=(
+  'plasma-workspace: set wallpapers and live wallpapers on KDE Plasma, and the Xero Slideshow plugin'
+  'kpackage: kpackagetool6 to install the Xero Slideshow and Smart Video Wallpaper Reborn plugins'
+  'qt6-tools: qdbus6 to apply wallpapers through plasmashell'
+  'polkit: pkexec to install missing live wallpaper dependencies'
+  'vulkan-tools: detect a dedicated GPU for AI upscaling'
 )
 source=(
   'xero_wallpaper_browser.py'
@@ -29,27 +37,34 @@ source=(
 sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 package() {
-  # Install main application
-  install -Dm755 "$srcdir/xero_wallpaper_browser.py" \
-    "$pkgdir/usr/lib/$pkgname/xero_wallpaper_browser.py"
+  local libdir="$pkgdir/usr/lib/$pkgname"
 
-  # Install logo
-  install -Dm644 "$srcdir/xero_logo.png" \
-    "$pkgdir/usr/lib/$pkgname/xero_logo.png"
+  install -Dm755 "$srcdir/xero_wallpaper_browser.py" "$libdir/xero_wallpaper_browser.py"
+  install -Dm644 "$srcdir/xero_logo.png" "$libdir/xero_logo.png"
 
-  # Install icon (multiple sizes)
+  # makepkg cannot take a directory as a source, so the package tree is copied from the PKGBUILD folder.
+  cp -r "$startdir/xero_wallpapers" "$libdir/"
+  find "$libdir/xero_wallpapers" -name '__pycache__' -type d -prune -exec rm -rf {} +
+  find "$libdir/xero_wallpapers" -type d -exec chmod 755 {} +
+  find "$libdir/xero_wallpapers" -type f -exec chmod 644 {} +
+
+  # Only the compiled .qsb shaders are loaded, so the .frag sources stay out of the package.
+  local plugin="$pkgdir/usr/share/plasma/wallpapers/org.xerolinux.wallpapers.slideshow"
+  install -Dm644 "$startdir/plasma/org.xerolinux.wallpapers.slideshow/metadata.json" "$plugin/metadata.json"
+  cp -r "$startdir/plasma/org.xerolinux.wallpapers.slideshow/contents" "$plugin/"
+  find "$plugin" -name '*.frag' -delete
+  find "$plugin" -type d -exec chmod 755 {} +
+  find "$plugin" -type f -exec chmod 644 {} +
+
   install -Dm644 "$srcdir/xero_logo.png" \
     "$pkgdir/usr/share/icons/hicolor/256x256/apps/$pkgname.png"
-
-  # Install desktop entry
   install -Dm644 "$srcdir/$pkgname.desktop" \
     "$pkgdir/usr/share/applications/$pkgname.desktop"
 
-  # Install launcher script
   install -dm755 "$pkgdir/usr/bin"
-  cat > "$pkgdir/usr/bin/$pkgname" << 'EOF'
+  cat > "$pkgdir/usr/bin/$pkgname" << 'LAUNCHER'
 #!/bin/bash
 exec python /usr/lib/xero-wallpaper-browser/xero_wallpaper_browser.py "$@"
-EOF
+LAUNCHER
   chmod 755 "$pkgdir/usr/bin/$pkgname"
 }

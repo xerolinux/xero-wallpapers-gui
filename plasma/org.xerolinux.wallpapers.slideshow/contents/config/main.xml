@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+
+  <group name="General">
+    <entry name="SlideFolder" type="String">
+      <label>Absolute path of the folder to show</label>
+      <default></default>
+    </entry>
+    <entry name="SlideInterval" type="int">
+      <label>Interval between wallpapers (s)</label>
+      <default>3600</default>
+      <min>60</min>
+      <max>604800</max>
+    </entry>
+    <entry name="SlideOrder" type="int">
+      <label>Order: 0 random, 1 by name</label>
+      <default>0</default>
+      <min>0</min>
+      <max>1</max>
+    </entry>
+    <entry name="Transition" type="String">
+      <label>Transition: fade, slide, wipe, grow, zoom, pixelate, wave or random</label>
+      <default>fade</default>
+    </entry>
+    <entry name="TransitionDuration" type="int">
+      <label>Transition duration (ms)</label>
+      <default>1200</default>
+      <min>500</min>
+      <max>3000</max>
+    </entry>
+    <entry name="FillMode" type="int">
+      <label>Image fill mode</label>
+      <default>2</default>
+    </entry>
+  </group>
+</kcfg>

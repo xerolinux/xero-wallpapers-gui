@@ -1,7 +1,7 @@
 # Maintainer: XeroLinux <xero@xerolinux.xyz>
 pkgname=xero-wallpaper-browser
-pkgver=2.0.0
-pkgrel=1
+pkgver=2.0.1
+pkgrel=2
 pkgdesc="Browse, preview, upscale and set wallpapers and live wallpapers on KDE Plasma"
 arch=('any')
 url="https://github.com/xerolinux/xero-wallpapers-gui"

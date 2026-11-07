@@ -21,7 +21,6 @@ CONTENT_TYPE_EXTS = {
 }
 CHUNK = 64 * 1024
 SAFE_SCHEMES = ("http", "https")
-UNTYPED = ("", "application/octet-stream", "binary/octet-stream")
 
 
 class DownloadCancelled(Exception):
@@ -100,10 +99,10 @@ def _check_media(url: str, final_url: str, headers, head: bytes) -> str:
     mime = headers.get("Content-Type", "").split(";")[0].strip().lower()
     if mime.startswith(("image/", "video/")):
         return ""
-    if mime in UNTYPED:
-        sniffed = _magic(head)
-        if sniffed:
-            return sniffed
+    sniffed = _magic(head)
+    if sniffed:
+        return sniffed
+    if not mime.startswith(("text/", "application/json", "application/xml")):
         named = _disposition_ext(headers.get("Content-Disposition", ""))
         exts = {named, *(Path(urlparse(u).path).suffix.lower() for u in (url, final_url) if u)}
         if exts & MEDIA_EXTS and head.lstrip()[:1] not in (b"<", b"{"):

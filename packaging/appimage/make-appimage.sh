@@ -62,7 +62,7 @@ fi
 # the last, hosts fall back to their own Kirigami libraries, which need a different Qt's private API.
 KDE_QML_PLUGINS=$(find /usr/lib/qt6/qml/org/kde/kirigami /usr/lib/qt6/qml/org/kde/desktop \
 	/usr/lib/qt6/qml/org/kde/qqc2desktopstyle /usr/lib/qt6/qml/org/kde/sonnet /usr/lib/qt6/qml/org/kde/union \
-	-name '*.so' 2>/dev/null)
+	-name '*.so' 2>/dev/null || true)
 # shellcheck disable=SC2086
 "$QUICK_SHARUN" \
 	$KDE_QML_PLUGINS \

@@ -20,7 +20,7 @@ from PIL import Image
 from PyQt6.QtCore import QBuffer, QFile, QObject, QProcess, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QDesktopServices, QGuiApplication, QImage
 
-from .. import dupes, library, net, paths, slideshow, svwr, update, upscale, wallpaper
+from .. import dupes, kpackage, library, net, paths, slideshow, svwr, update, upscale, wallpaper
 from ..colors import hue_matches, palette
 from ..config import Config
 from ..downloads import SAFE_SCHEMES, DownloadCancelled, already_downloaded, download
@@ -1030,7 +1030,7 @@ class SvwrController(QObject):
     changed = pyqtSignal()
     finished = pyqtSignal(bool)
     _stepsReady = pyqtSignal(int, object, str)
-    _downloaded = pyqtSignal(int, str)
+    _stepDone = pyqtSignal(int, str, str)
     _progressed = pyqtSignal(int, float)
     _latestReady = pyqtSignal(str)
     _depsReady = pyqtSignal(list)
@@ -1054,7 +1054,7 @@ class SvwrController(QObject):
         self._index = 0
         self._proc: QProcess | None = None
         self._stepsReady.connect(self._on_steps)
-        self._downloaded.connect(self._on_downloaded)
+        self._stepDone.connect(self._on_step_done)
         self._progressed.connect(self._on_progress)
         self._latestReady.connect(self._on_latest)
         self._depsReady.connect(self._on_deps)
@@ -1229,6 +1229,9 @@ class SvwrController(QObject):
             _, url, sha256, name = step
             self._append(f"Downloading {name}")
             net.EXECUTOR.submit(self._download, self._gen, url, sha256, name)
+        elif step[0] == "install":
+            self._append(f"Installing {step[1]}")
+            net.EXECUTOR.submit(self._install_archive, self._gen, step[1])
         else:
             self._run(step[1])
 
@@ -1245,20 +1248,31 @@ class SvwrController(QObject):
         except Exception as e:
             log.exception("SVWR download crashed")
             error = f"unexpected error ({type(e).__name__})"
-        _safe_emit(self._downloaded, gen, error)
+        _safe_emit(self._stepDone, gen, error, "Download verified")
+
+    def _install_archive(self, gen: int, name: str):
+        try:
+            svwr.install_archive(name)
+            error = ""
+        except svwr.SvwrError as e:
+            error = str(e)
+        except Exception as e:
+            log.exception("SVWR install crashed")
+            error = f"unexpected error ({type(e).__name__})"
+        _safe_emit(self._stepDone, gen, error, "Installed into " + str(kpackage.USER_DIR))
 
     def _on_progress(self, gen: int, fraction: float):
         if gen == self._gen and self._steps:
             self._progress = (self._index - 1 + fraction) / len(self._steps)
             self.changed.emit()
 
-    def _on_downloaded(self, gen: int, error: str):
+    def _on_step_done(self, gen: int, error: str, done: str):
         if gen != self._gen:
             return
         if error:
             self._fail(error)
         else:
-            self._append("Download verified")
+            self._append(done)
             self._next()
 
     def _run(self, argv: list[str]):

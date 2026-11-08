@@ -18,7 +18,7 @@ sudo pacman -S xero-wallpaper-browser
 
 ## Other distros
 
-**AppImage**: download `Xero_Wallpapers-<version>-<arch>.AppImage` (x86_64 or aarch64) from [Releases](https://github.com/xerolinux/xero-wallpapers-gui/releases), make it executable and run it. It updates itself: when a newer release is out, an "Update to <version>" button appears at the top right, and the app restarts on the new version. Browsing, downloading, editing and the library work on any desktop. Live wallpapers, the slideshow plugin and Smart Video Wallpaper Reborn need KDE Plasma (with `kpackagetool6` and `qdbus6` installed on the system).
+**AppImage**: download `Xero_Wallpapers-<version>-<arch>.AppImage` (x86_64 or aarch64) from [Releases](https://github.com/xerolinux/xero-wallpapers-gui/releases), make it executable and run it. It updates itself: when a newer release is out, an "Update to <version>" button appears at the top right, and the app restarts on the new version. Browsing, downloading, editing and the library work on any desktop. Live wallpapers, the slideshow plugin and Smart Video Wallpaper Reborn need KDE Plasma; the app installs both plugins for your user, no extra system tools needed.
 
 To [run from source](#run-from-source) instead, install the dependencies first.
 

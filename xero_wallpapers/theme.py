@@ -5,6 +5,8 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QGuiApplication, QIcon, QPalette
 
+from . import paths
+
 FALLBACK = "Layan.colors"
 BUNDLED = Path(__file__).resolve().parent / "data" / FALLBACK
 ICON_THEME = "breeze-dark"
@@ -43,11 +45,9 @@ def _system_is_dark() -> bool:
 
 
 def _fallback_scheme() -> Path:
-    data_dirs = [os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")]
-    data_dirs += (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
-    for base in data_dirs:
-        candidate = Path(base) / "color-schemes" / FALLBACK
-        if base and candidate.is_file():
+    for base in (paths.DATA_HOME, *paths.SYSTEM_DATA_DIRS):
+        candidate = base / "color-schemes" / FALLBACK
+        if candidate.is_file():
             return candidate
     return BUNDLED
 

@@ -75,6 +75,7 @@ KDE_QML_PLUGINS=$(find /usr/lib/qt6/qml/org/kde/kirigami /usr/lib/qt6/qml/org/kd
 	/usr/lib/python3*/site-packages/PyQt6/QtNetwork.abi3.so \
 	/usr/lib/python3*/site-packages/PyQt6/QtQml.abi3.so \
 	/usr/lib/python3*/site-packages/PyQt6/QtQuick.abi3.so \
+	/usr/lib/python3*/site-packages/PyQt6/QtDBus.abi3.so \
 	/usr/lib/python3*/site-packages/PIL/*.so \
 	/usr/lib/qt6/plugins/multimedia \
 	/usr/lib/qt6/plugins/kf6/kirigami

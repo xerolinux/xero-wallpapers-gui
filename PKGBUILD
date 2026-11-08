@@ -1,7 +1,7 @@
 # Maintainer: XeroLinux <xero@xerolinux.xyz>
 pkgname=xero-wallpaper-browser
-pkgver=2.0.1
-pkgrel=2
+pkgver=2.0.7
+pkgrel=1
 pkgdesc="Browse, preview, upscale and set wallpapers and live wallpapers on KDE Plasma"
 arch=('any')
 url="https://github.com/xerolinux/xero-wallpapers-gui"
@@ -24,8 +24,6 @@ depends=(
 )
 optdepends=(
   'plasma-workspace: set wallpapers and live wallpapers on KDE Plasma, and the Xero Slideshow plugin'
-  'kpackage: kpackagetool6 to install the Xero Slideshow and Smart Video Wallpaper Reborn plugins'
-  'qt6-tools: qdbus6 to apply wallpapers through plasmashell'
   'polkit: pkexec to install missing live wallpaper dependencies'
   'vulkan-tools: detect a dedicated GPU for AI upscaling'
 )

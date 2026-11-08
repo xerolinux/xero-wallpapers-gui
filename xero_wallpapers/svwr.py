@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from . import net, paths
+from . import kpackage, net, paths
 
 ID = "luisbocanegra.smart.video.wallpaper.reborn"
 REPO = "https://github.com/luisbocanegra/plasma-smart-video-wallpaper-reborn"
@@ -19,14 +19,10 @@ RUNTIME_DEPS = ("qt6-multimedia", "qt6-multimedia-ffmpeg")
 OS_RELEASE = Path("/etc/os-release")
 OBS = "https://download.opensuse.org/repositories/home:/luisbocanegra/"
 ZYPP_REPO = Path("/etc/zypp/repos.d/home_luisbocanegra.repo")
+OSTREE_BOOTED = Path("/run/ostree-booted")
 TIMEOUT = 30
 
-PLUGIN_DIRS = [
-    Path("/usr/share/plasma/wallpapers"),
-    Path.home() / ".local/share/plasma/wallpapers",
-]
-
-Step = tuple[str, str, str, str] | tuple[str, list[str]]
+Step = tuple[str, str, str, str] | tuple[str, list[str]] | tuple[str, str]
 
 
 class SvwrError(Exception):
@@ -34,7 +30,7 @@ class SvwrError(Exception):
 
 
 def _metadata() -> tuple[Path, str] | None:
-    for root in PLUGIN_DIRS:
+    for root in kpackage.PLUGIN_DIRS:
         try:
             meta = json.loads((root / ID / "metadata.json").read_text())
             return root, str(meta.get("KPlugin", {}).get("Version", ""))
@@ -50,7 +46,7 @@ def installed_version() -> str | None:
 
 def archive_install() -> bool:
     found = _metadata()
-    return bool(found) and found[0] == PLUGIN_DIRS[-1]
+    return bool(found) and found[0] == kpackage.USER_DIR
 
 
 def parse_version(s: str) -> tuple[int, ...]:
@@ -89,7 +85,8 @@ def distro() -> Literal["arch", "fedora", "opensuse", "other"]:
     ids = {ident, *info.get("ID_LIKE", "").lower().split()}
     if "arch" in ids:
         return "arch"
-    if "fedora" in ids and "rhel" not in ids:
+    # Atomic variants (Kinoite) can't dnf install; they take the user-level archive route.
+    if "fedora" in ids and "rhel" not in ids and not OSTREE_BOOTED.exists():
         return "fedora"
     # The author's OBS repo only builds for Tumbleweed and Slowroll; Leap takes the archive route.
     if ident in ("opensuse-tumbleweed", "opensuse-slowroll"):
@@ -177,6 +174,13 @@ def download_archive(url: str, sha256: str, name: str, progress=None) -> Path:
     return target
 
 
+def install_archive(name: str) -> None:
+    try:
+        kpackage.install(archive_path(name), ID)
+    except kpackage.KPackageError as e:
+        raise SvwrError(str(e)) from e
+
+
 def missing_runtime_deps() -> list[str]:
     if distro() != "arch":
         return []
@@ -218,7 +222,7 @@ def install_steps(update: bool, allow_repo: bool = False) -> list[Step]:
     steps = [deps_step(missing)] if missing else []
     steps += [
         ("download", url, sha256, name),
-        ("run", ["kpackagetool6", "-t", "Plasma/Wallpaper", "-u" if update else "-i", str(archive_path(name))]),
+        ("install", name),
     ]
     return steps
 

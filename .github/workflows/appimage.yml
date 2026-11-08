@@ -31,11 +31,9 @@ jobs:
         run: sh packaging/appimage/get-dependencies.sh
       - name: Stamp version
         id: version
-        # major.minor come from xero_wallpapers/__init__.py, the patch number is this workflow's run number.
+        # push.sh writes the release version into xero_wallpapers/__init__.py and the PKGBUILD before each push.
         run: |
-          base=$(sed -n 's/^VERSION = "\([0-9]*\.[0-9]*\).*"$/\1/p' xero_wallpapers/__init__.py)
-          version="${base}.${GITHUB_RUN_NUMBER}"
-          sed -i "s/^VERSION = .*/VERSION = \"${version}\"/" xero_wallpapers/__init__.py
+          version=$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' xero_wallpapers/__init__.py)
           sed -i "s|^UPDATE_REPO = .*|UPDATE_REPO = \"${GITHUB_REPOSITORY}\"|" xero_wallpapers/__init__.py
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Building version ${version}"

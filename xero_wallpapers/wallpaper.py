@@ -6,8 +6,9 @@ import weakref
 from pathlib import Path
 
 from PyQt6.QtCore import QUrl
+from PyQt6.QtDBus import QDBus, QDBusConnection, QDBusMessage
 
-from . import svwr
+from . import library, svwr
 
 TIMEOUT = 30
 
@@ -37,8 +38,6 @@ def is_plasma() -> bool:
 def _static_commands(path: str) -> list[list[str]]:
     desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
     uri = Path(path).as_uri()
-    if is_plasma():
-        return [["plasma-apply-wallpaperimage", path]]
     if "GNOME" in desktop:
         return [
             ["gsettings", "set", "org.gnome.desktop.background", key, uri]
@@ -95,10 +94,41 @@ def _notify(kind: str) -> None:
 
 
 def evaluate_script(script: str) -> None:
-    run(["qdbus6", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", script])
+    bus = QDBusConnection.sessionBus()
+    if not bus.isConnected():
+        raise WallpaperError("Couldn't reach the session D-Bus")
+    message = QDBusMessage.createMethodCall("org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell",
+                                            "evaluateScript")
+    message.setArguments([script])
+    reply = bus.call(message, QDBus.CallMode.Block, TIMEOUT * 1000)
+    if reply.type() == QDBusMessage.MessageType.ErrorMessage:
+        raise WallpaperError(reply.errorMessage() or reply.errorName())
+
+
+def desktops_script(plugin: str, values: dict) -> str:
+    lines = "".join(f"    d.writeConfig({json.dumps(k)}, {json.dumps(v)});\n" for k, v in values.items())
+    plugin = json.dumps(plugin)
+    return (
+        "var ds = desktops();\n"
+        "for (var i = 0; i < ds.length; i++) {\n"
+        "    var d = ds[i];\n"
+        f"    d.wallpaperPlugin = {plugin};\n"
+        f'    d.currentConfigGroup = ["Wallpaper", {plugin}, "General"];\n'
+        f"{lines}"
+        "}\n"
+    )
+
+
+def static_script(path: Path | None) -> str:
+    values = {"Image": Path(path).as_uri()} if path else {}
+    return desktops_script(library.IMAGE_PLUGIN, values)
 
 
 def set_static(path: Path) -> None:
+    if is_plasma():
+        evaluate_script(static_script(path))
+        _notify("static")
+        return
     cmds = _static_commands(str(path))
     if not cmds:
         raise WallpaperError(f"Couldn't find a wallpaper tool for this desktop. Set it manually: {path}")
@@ -123,17 +153,7 @@ def live_script(video: Path) -> str:
             "dayNightPhase": 4,
         }
     ])
-    plugin = json.dumps(svwr.ID)
-    return (
-        f"var videos = {json.dumps(videos)};\n"
-        "var ds = desktops();\n"
-        "for (var i = 0; i < ds.length; i++) {\n"
-        "    var d = ds[i];\n"
-        f"    d.wallpaperPlugin = {plugin};\n"
-        f'    d.currentConfigGroup = ["Wallpaper", {plugin}, "General"];\n'
-        '    d.writeConfig("VideoUrls", videos);\n'
-        "}\n"
-    )
+    return desktops_script(svwr.ID, {"VideoUrls": videos})
 
 
 def set_live(video: Path) -> None:

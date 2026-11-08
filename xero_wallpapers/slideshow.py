@@ -2,8 +2,8 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import library, svwr
-from .wallpaper import WallpaperError, evaluate_script, is_plasma, run
+from . import kpackage, library, svwr
+from .wallpaper import WallpaperError, desktops_script, evaluate_script, is_plasma, static_script
 
 ID = "org.xerolinux.wallpapers.slideshow"
 # Source checkouts ship the plugin next to the package; the Arch package installs it system-wide instead.
@@ -34,26 +34,12 @@ def clamp_ms(ms: int) -> int:
     return max(MIN_MS, min(MAX_MS, int(ms)))
 
 
-def _desktops(plugin: str, values: dict) -> str:
-    lines = "".join(f"    d.writeConfig({json.dumps(k)}, {json.dumps(v)});\n" for k, v in values.items())
-    plugin = json.dumps(plugin)
-    return (
-        "var ds = desktops();\n"
-        "for (var i = 0; i < ds.length; i++) {\n"
-        "    var d = ds[i];\n"
-        f"    d.wallpaperPlugin = {plugin};\n"
-        f'    d.currentConfigGroup = ["Wallpaper", {plugin}, "General"];\n'
-        f"{lines}"
-        "}\n"
-    )
-
-
 def slideshow_script(folder: Path, minutes: int, order: str, transition: str, duration_ms: int) -> str:
     if order not in ORDERS:
         raise ValueError(f"unknown order {order!r}")
     if transition not in TRANSITIONS:
         raise ValueError(f"unknown transition {transition!r}")
-    return _desktops(ID, {
+    return desktops_script(ID, {
         "SlideFolder": str(folder),
         "SlideInterval": max(MIN_SECONDS, clamp_minutes(minutes) * 60),
         "SlideOrder": ORDERS[order],
@@ -61,11 +47,6 @@ def slideshow_script(folder: Path, minutes: int, order: str, transition: str, du
         "TransitionDuration": clamp_ms(duration_ms),
         "FillMode": FILL_CROP,
     })
-
-
-def static_script(path: Path | None) -> str:
-    values = {"Image": Path(path).as_uri()} if path else {}
-    return _desktops(library.IMAGE_PLUGIN, values)
 
 
 def folder_problem(folder: Path | str) -> str:
@@ -86,7 +67,7 @@ def bundled_version() -> str | None:
 
 
 def _installed() -> tuple[Path, str] | None:
-    for root in svwr.PLUGIN_DIRS:
+    for root in kpackage.PLUGIN_DIRS:
         version = _version(root / ID)
         # "0" means unreadable metadata: Plasma can't load that copy either.
         if version not in (None, "0"):
@@ -94,22 +75,24 @@ def _installed() -> tuple[Path, str] | None:
     return None
 
 
+def _install_bundled() -> None:
+    try:
+        kpackage.install(BUNDLED, ID)
+    except kpackage.KPackageError as e:
+        raise WallpaperError(str(e)) from e
+
+
 def ensure_plugin() -> None:
     bundled = bundled_version()
     # Plasma prefers the user copy, so a stale one would shadow a newer system install.
-    user = _version(svwr.PLUGIN_DIRS[-1] / ID)
+    user = _version(kpackage.USER_DIR / ID)
     if user is not None:
         if bundled and svwr.is_newer(bundled, user):
-            try:
-                run(["kpackagetool6", "-t", "Plasma/Wallpaper", "-u", str(BUNDLED)])
-            except WallpaperError:
-                # kpackagetool6 can't upgrade a copy whose metadata is broken; replace it instead.
-                run(["kpackagetool6", "-t", "Plasma/Wallpaper", "-r", ID])
-                run(["kpackagetool6", "-t", "Plasma/Wallpaper", "-i", str(BUNDLED)])
+            _install_bundled()
     elif _installed() is None:
         if bundled is None:
             raise WallpaperError("The Xero Slideshow plugin isn't bundled with this copy of the app")
-        run(["kpackagetool6", "-t", "Plasma/Wallpaper", "-i", str(BUNDLED)])
+        _install_bundled()
 
 
 def enable(folder: Path, minutes: int, order: str, transition: str, duration_ms: int) -> None:

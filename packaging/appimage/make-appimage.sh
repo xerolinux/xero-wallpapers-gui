@@ -58,8 +58,14 @@ fi
 
 # quick-sharun skips _ssl and _hashlib (HTTPS needs both) and does not scan site-packages for libraries. Plugins
 # are picked from the libraries the arguments link against, which misses those only QML pulls in: the
-# QtMultimedia FFmpeg backend and Kirigami's desktop theme.
+# QtMultimedia FFmpeg backend, Kirigami's desktop theme, and the libraries behind the KDE QML plugins. Without
+# the last, hosts fall back to their own Kirigami libraries, which need a different Qt's private API.
+KDE_QML_PLUGINS=$(find /usr/lib/qt6/qml/org/kde/kirigami /usr/lib/qt6/qml/org/kde/desktop \
+	/usr/lib/qt6/qml/org/kde/qqc2desktopstyle /usr/lib/qt6/qml/org/kde/sonnet /usr/lib/qt6/qml/org/kde/union \
+	-name '*.so' 2>/dev/null)
+# shellcheck disable=SC2086
 "$QUICK_SHARUN" \
+	$KDE_QML_PLUGINS \
 	/usr/bin/python3 \
 	/usr/lib/python3*/lib-dynload/_ssl*.so \
 	/usr/lib/python3*/lib-dynload/_hashlib*.so \

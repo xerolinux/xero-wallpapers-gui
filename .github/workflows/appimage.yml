@@ -15,9 +15,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { runs-on: ubuntu-latest, arch: x86_64 }
+          - { runs-on: ubuntu-24.04, arch: x86_64 }
           - { runs-on: ubuntu-24.04-arm, arch: aarch64 }
     container: ghcr.io/pkgforge-dev/archlinux:latest
+    env:
+      # Authenticated GitHub API calls in the pkgforge scripts; anonymous ones from runner IPs get 503s.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:

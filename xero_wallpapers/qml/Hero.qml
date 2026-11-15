@@ -95,7 +95,7 @@ Item {
             opacity: 0.8
             font.capitalization: Font.AllUppercase
             font.letterSpacing: 1.5
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font.pointSize: smallPointSize
         }
 
         QQC2.Label {

@@ -11,6 +11,24 @@ from .base import Filters, Item, Source, SourceError
 BASE = "https://motionbgs.com"
 NAME = "motionbgs"
 _MEDIA_ID = re.compile(r"/media/(\d+)/")
+_TAG = re.compile(r"/tag:([a-z0-9-]+)")
+CATEGORIES = (
+    ("anime", "Anime"),
+    ("games", "Games"),
+    ("superhero", "Superhero"),
+    ("nature", "Nature"),
+    ("car", "Car"),
+    ("tv", "TV & Movie"),
+    ("holiday", "Holiday"),
+    ("animal", "Animal"),
+    ("fantasy", "Fantasy"),
+    ("space", "Space"),
+    ("horror", "Horror"),
+    ("technology", "Technology"),
+    ("football", "Football"),
+    ("japan", "Japan"),
+)
+_LABELS = dict(CATEGORIES)
 
 
 def parse_list(html: str) -> list[Item]:
@@ -24,7 +42,8 @@ def parse_list(html: str) -> list[Item]:
         if "/media/" not in thumb and "/i/" not in thumb:
             continue
         page_url = urljoin(BASE, link["href"])
-        if page_url in seen:
+        # Sub-category tiles link to /tag: pages, not wallpapers.
+        if page_url in seen or "/tag:" in page_url:
             continue
         seen.add(page_url)
         ttl = link.select_one(".ttl")
@@ -59,16 +78,44 @@ def parse_detail(html: str, item: Item) -> Item:
     preview = soup.select_one("video source[src]")
     if preview:
         fields["extra"] = {**item.extra, "preview_video": urljoin(BASE, preview["src"])}
+    tags = _post_tags(soup)
+    if tags:
+        fields["tags"] = list(dict.fromkeys([*item.tags, *tags]))
     return replace(item, **fields)
+
+
+def _post_tags(soup: BeautifulSoup) -> list[str]:
+    # The post's own tags sit between its title and the download links; the menus also link /tag: pages.
+    title = soup.select_one("h1")
+    tags = []
+    for a in title.find_all_next("a", href=True) if title else []:
+        if "/dl/" in a["href"]:
+            break
+        m = _TAG.search(a["href"])
+        if m:
+            tags.append(m.group(1).replace("-", " "))
+    return tags
 
 
 class MotionBGsSource(Source):
     name = NAME
     kind = "live"
-    server_filters = frozenset({"query"})
+    server_filters = frozenset({"query", "category"})
     sizes = "details"
+    categories = CATEGORIES
+    tags_in_details = True
+
+    def server_keys(self, f: Filters) -> frozenset[str]:
+        if f.category in _LABELS:
+            return self.server_filters - {"query"}
+        return self.server_filters
 
     def search(self, page: int, f: Filters) -> list[Item]:
+        label = _LABELS.get(f.category)
+        if label:
+            url = f"{BASE}/tag:{f.category}/" + (f"{page}/" if page > 1 else "")
+            tag = label.lower()
+            return [replace(i, tags=[*i.tags, tag]) for i in parse_list(fetch_html("MotionBGs", url))]
         if f.query.strip():
             url = f"{BASE}/{page}/?s={quote(f.query.strip())}"
         else:

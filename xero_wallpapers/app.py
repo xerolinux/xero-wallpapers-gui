@@ -6,9 +6,10 @@ from pathlib import Path
 
 from PyQt6.QtCore import QTimer, QUrl
 from PyQt6.QtGui import QGuiApplication, QIcon
+from PyQt6.QtWidgets import QApplication
 from PyQt6.QtQml import QQmlApplicationEngine
 
-from . import VERSION, net, paths, slideshow, theme
+from . import VERSION, net, paths, slideshow, theme, vision
 from .config import Config
 from .sources.registry import build_sources
 from .sources.wallhaven import tag_fetcher
@@ -71,9 +72,10 @@ def main():
     _setup_logging()
     sys.excepthook = _excepthook
 
-    # Kirigami's built-in fallback theme is light-only; the desktop style follows the Layan fallback scheme.
-    os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "org.kde.desktop")
-    app = QGuiApplication(sys.argv)
+    # The same look on every desktop: org.kde.desktop draws the controls with the app's own QStyle
+    # (bundled Kvantum LayanDark, see theme.py), which needs a QApplication rather than a QGuiApplication.
+    os.environ["QT_QUICK_CONTROLS_STYLE"] = "org.kde.desktop"
+    app = QApplication(sys.argv)
     app.setApplicationName("xero-wallpaper-browser")
     app.setApplicationDisplayName("Xero Wallpapers")
     app.setApplicationVersion(VERSION)
@@ -90,7 +92,8 @@ def main():
     browse = BrowseController(
         sources, settings.liveEnabled, tags=tags, screen=native_res,
         min_res=native_res if config.get("match_screen") else "any",
-        hide_duplicates=settings.hideDuplicates,
+        hide_duplicates=settings.hideDuplicates, no_anime=settings.noAnime,
+        ai_filter=settings.aiFilter,
     )
     detail = DetailController(browse.model, sources)
     downloads = DownloadController(config, browse.model, sources)
@@ -116,6 +119,8 @@ def main():
     settings.liveEnabledChanged.connect(request_rebuild)
 
     settings.matchScreenChanged.connect(lambda: browse.set_match_screen(settings.matchScreen))
+    settings.noAnimeChanged.connect(lambda: browse.set_no_anime(settings.noAnime))
+    settings.aiFilterChanged.connect(lambda: browse.set_ai_filter(settings.aiFilter))
     settings.hideDuplicatesChanged.connect(lambda: browse.set_hide_duplicates(settings.hideDuplicates))
     settings.hideDuplicatesChanged.connect(lib.refresh)
     svwr.checkDeps()
@@ -135,6 +140,7 @@ def main():
     ctx.setContextProperty("svwr", svwr)
     ctx.setContextProperty("appUpdate", app_update)
     ctx.setContextProperty("appVersion", VERSION)
+    ctx.setContextProperty("smallPointSize", theme.SMALL_POINTS)
     engine.setInitialProperties({"logoUrl": QUrl.fromLocalFile(str(LOGO))})
     engine.load(QUrl.fromLocalFile(str(PACKAGE_DIR / "qml" / "Main.qml")))
     if not engine.rootObjects():
@@ -144,7 +150,7 @@ def main():
     code = app.exec()
     # Destroy QML before the context-property controllers so bindings never see them as null.
     del engine
-    if not net.shutdown([net.EXECUTOR, THUMB_EXECUTOR], QUIT_GRACE, drain=[slideshow.EXECUTOR]):
+    if not net.shutdown([net.EXECUTOR, THUMB_EXECUTOR, vision.EXECUTOR], QUIT_GRACE, drain=[slideshow.EXECUTOR]):
         # A worker is stuck in a network or D-Bus call; don't keep an invisible process alive for it.
         log.warning("background work still running at quit, exiting without it")
         logging.shutdown()

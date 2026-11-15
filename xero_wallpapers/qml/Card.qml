@@ -97,7 +97,7 @@ Item {
                 id: badgeText
                 anchors.centerIn: parent
                 color: "white"
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                font.pointSize: smallPointSize
                 font.weight: Font.DemiBold
                 text: card.kind === "live"
                       ? (card.duration > 0 ? "▶ " + card.formatDuration(card.duration) : "▶")
@@ -142,7 +142,7 @@ Item {
                     text: card.source
                     color: "white"
                     opacity: 0.75
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font.pointSize: smallPointSize
                     elide: Text.ElideRight
                 }
             }

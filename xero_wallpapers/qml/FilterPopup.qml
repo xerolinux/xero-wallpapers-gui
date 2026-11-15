@@ -7,17 +7,20 @@ QQC2.Popup {
     id: popup
 
     readonly property var hues: [0, 30, 55, 130, 180, 215, 265, 310]
-    readonly property var resolutions: [["any", "Any"], ["1440p", "1440p+"], ["4k", "4K+"], ["8k", "8K"]]
+    readonly property var resolutions: [["any", "Any"], ["1080p", "1080p"], ["1440p", "1440p"], ["4k", "4K+"]]
     readonly property var ratios: [["any", "Any"], ["16:9", "16:9"], ["16:10", "16:10"], ["21:9", "21:9"],
                                    ["32:9", "32:9"], ["ultrawide", "Ultra-wide"]]
     readonly property string noResolution: "This source doesn't list resolutions, so these filters don't apply"
 
     property var draftTags: []
+    property string draftCategory: ""
+    property bool draftNoAnime: false
     property int draftHue: -1
     property string draftRes: "any"
     property string draftRatio: "any"
 
     readonly property bool resolutionKnown: browse.filterInfo.resolution === true
+    readonly property var categories: browse.filterInfo.categories || []
     readonly property var tagOptions: {
         const tags = (browse.filterInfo.tags || []).slice()
         for (const t of draftTags)
@@ -27,7 +30,8 @@ QQC2.Popup {
     }
 
     function draft() {
-        return { tags: draftTags, hue: draftHue, min_res: draftRes, ratio: draftRatio }
+        // The controller drops a category No anime hides, so turning it on here needs no extra check.
+        return { tags: draftTags, category: draftCategory, hue: draftHue, min_res: draftRes, ratio: draftRatio }
     }
 
     function toggleTag(tag) {
@@ -43,6 +47,8 @@ QQC2.Popup {
     onAboutToShow: {
         const f = browse.filters
         draftTags = (f.tags || []).slice()
+        draftCategory = f.category || ""
+        draftNoAnime = settings.noAnime
         draftHue = typeof f.hue === "number" ? f.hue : -1
         draftRes = f.min_res
         draftRatio = f.ratio
@@ -96,12 +102,55 @@ QQC2.Popup {
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing * 2
 
-        SectionLabel { text: "Tags" }
+        RowLayout {
+            Layout.fillWidth: true
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                text: "No anime"
+                font.weight: Font.DemiBold
+                opacity: 0.7
+            }
+
+            QQC2.Switch {
+                checked: popup.draftNoAnime
+                onToggled: popup.draftNoAnime = checked
+            }
+        }
+
+        SectionLabel { text: popup.categories.length > 0 ? "Category" : "Tags" }
 
         Flow {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
-            visible: popup.tagOptions.length > 0
+            visible: popup.categories.length > 0
+
+            Kirigami.Chip {
+                text: "All"
+                checkable: true
+                closable: false
+                checked: popup.draftCategory === ""
+                onClicked: popup.draftCategory = ""
+            }
+
+            Repeater {
+                model: popup.categories
+
+                delegate: Kirigami.Chip {
+                    required property var modelData
+                    text: modelData.label
+                    checkable: true
+                    closable: false
+                    checked: popup.draftCategory === modelData.slug
+                    onClicked: popup.draftCategory = modelData.slug
+                }
+            }
+        }
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+            visible: popup.categories.length === 0 && popup.tagOptions.length > 0
 
             Repeater {
                 model: popup.tagOptions
@@ -118,7 +167,7 @@ QQC2.Popup {
         }
 
         QQC2.Label {
-            visible: popup.tagOptions.length === 0
+            visible: popup.categories.length === 0 && popup.tagOptions.length === 0
             text: "No tags in the loaded wallpapers"
             opacity: 0.6
         }
@@ -164,32 +213,23 @@ QQC2.Popup {
             available: popup.resolutionKnown
             reason: popup.noResolution
 
-            ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+            RowLayout {
+                spacing: 0
 
-                RowLayout {
-                    spacing: 0
+                Repeater {
+                    model: popup.resolutions
 
-                    Repeater {
-                        model: popup.resolutions
-
-                        delegate: QQC2.Button {
-                            required property var modelData
-                            text: modelData[1]
-                            checkable: true
-                            checked: popup.draftRes === modelData[0]
-                            onClicked: popup.draftRes = modelData[0]
+                    delegate: QQC2.Button {
+                        required property var modelData
+                        text: modelData[1]
+                        checkable: true
+                        checked: popup.draftRes === modelData[0]
+                        onClicked: {
+                            popup.draftRes = modelData[0]
+                            if (modelData[0] !== "any" && popup.draftRatio === "ultrawide")
+                                popup.draftRatio = "any"
                         }
                     }
-                }
-
-                QQC2.Button {
-                    visible: /^\d+x\d+$/.test(browse.screenRes)
-                    icon.name: "video-display"
-                    text: "My screen (" + browse.screenRes.replace("x", " × ") + ")"
-                    checkable: true
-                    checked: popup.draftRes === browse.screenRes
-                    onClicked: popup.draftRes = browse.screenRes
                 }
             }
         }
@@ -212,6 +252,8 @@ QQC2.Popup {
                         text: modelData[1]
                         checkable: true
                         closable: false
+                        // Ultra-wide sizes don't follow the 16:9 resolution steps, so it needs resolution "Any".
+                        enabled: modelData[0] !== "ultrawide" || popup.draftRes === "any"
                         checked: popup.draftRatio === modelData[0]
                         onClicked: popup.draftRatio = modelData[0]
                     }
@@ -224,7 +266,7 @@ QQC2.Popup {
             visible: !popup.resolutionKnown
             text: popup.noResolution
             wrapMode: Text.WordWrap
-            font: Kirigami.Theme.smallFont
+            font.pointSize: smallPointSize
             opacity: 0.6
         }
 
@@ -239,6 +281,7 @@ QQC2.Popup {
                 flat: true
                 onClicked: {
                     popup.draftTags = []
+                    popup.draftCategory = ""
                     popup.draftHue = -1
                     popup.draftRes = "any"
                     popup.draftRatio = "any"
@@ -249,6 +292,8 @@ QQC2.Popup {
                 text: "Apply filters"
                 highlighted: true
                 onClicked: {
+                    // Set before applying so a hidden anime category is dropped in the same reload.
+                    settings.noAnime = popup.draftNoAnime
                     browse.applyFilters(popup.draft())
                     popup.close()
                 }

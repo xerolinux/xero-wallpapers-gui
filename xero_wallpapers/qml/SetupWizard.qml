@@ -21,6 +21,8 @@ App.ModalCard {
     property string liveDir
     property bool liveEnabled
     property bool safeContent
+    property bool noAnime
+    property bool aiFilter
     property bool matchScreen
     property bool skipDuplicates
     property int cacheSizeMb
@@ -30,6 +32,8 @@ App.ModalCard {
         liveDir = settings.liveDir
         liveEnabled = settings.liveEnabled
         safeContent = settings.safeContent
+        noAnime = settings.noAnime
+        aiFilter = settings.aiFilter
         matchScreen = settings.matchScreen
         skipDuplicates = settings.skipDuplicates
         cacheSizeMb = settings.cacheSizeMb
@@ -53,6 +57,8 @@ App.ModalCard {
             liveDir: liveDir,
             liveEnabled: liveEnabled && svwr.installed,
             safeContent: safeContent,
+            noAnime: noAnime,
+            aiFilter: aiFilter,
             matchScreen: matchScreen,
             skipDuplicates: skipDuplicates,
             cacheSizeMb: cacheSizeMb
@@ -192,7 +198,7 @@ App.ModalCard {
                     Layout.fillWidth: true
                     text: option.description
                     color: Kirigami.Theme.disabledTextColor
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font.pointSize: smallPointSize
                     elide: Text.ElideRight
                 }
             }
@@ -245,7 +251,7 @@ App.ModalCard {
                     Layout.fillWidth: true
                     text: folder.path
                     color: Kirigami.Theme.disabledTextColor
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font.pointSize: smallPointSize
                     elide: Text.ElideMiddle
                 }
             }
@@ -270,7 +276,7 @@ App.ModalCard {
             id: pillLabel
             anchors.centerIn: parent
             color: parent.textColor
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font.pointSize: smallPointSize
             font.weight: Font.DemiBold
         }
     }
@@ -376,7 +382,7 @@ App.ModalCard {
                             QQC2.Label {
                                 text: "Setup"
                                 color: Kirigami.Theme.disabledTextColor
-                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                font.pointSize: smallPointSize
                             }
                         }
                     }
@@ -632,7 +638,7 @@ App.ModalCard {
                                             text: modelData.text
                                             wrapMode: Text.WordWrap
                                             color: Kirigami.Theme.disabledTextColor
-                                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                            font.pointSize: smallPointSize
                                         }
                                     }
                                 }
@@ -663,7 +669,7 @@ App.ModalCard {
                                 QQC2.Label {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                    font.pointSize: smallPointSize
                                     text: "<b>Built with AI help.</b> This app was built with the help of AI coding tools. It's open source, so you can read every line on GitHub."
                                 }
                             }
@@ -747,7 +753,7 @@ App.ModalCard {
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
                                         color: Kirigami.Theme.disabledTextColor
-                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                        font.pointSize: smallPointSize
                                         text: svwr.running ? svwr.stage
                                             : svwr.error !== "" ? svwr.error.split("\n").pop()
                                             : svwr.installed ? "Version " + svwr.version + " · ready to use"
@@ -828,9 +834,34 @@ App.ModalCard {
                             }
 
                             OptionCard {
+                                icon: "view-hidden"
+                                title: "No anime"
+                                description: "Hide anime and wallpapers showing people or characters"
+
+                                QQC2.Switch {
+                                    checked: wizard.noAnime
+                                    onToggled: wizard.noAnime = checked
+                                }
+                            }
+
+                            OptionCard {
+                                icon: "image-x-generic"
+                                title: "Use A.I Filtering"
+                                description: settings.aiAvailable
+                                    ? "With No anime on, an on-device image model also checks each thumbnail. Nothing is uploaded."
+                                    : "Not available: the image model or ONNX Runtime isn't installed"
+
+                                QQC2.Switch {
+                                    enabled: settings.aiAvailable && wizard.noAnime
+                                    checked: wizard.aiFilter && settings.aiAvailable
+                                    onToggled: wizard.aiFilter = checked
+                                }
+                            }
+
+                            OptionCard {
                                 icon: "preferences-desktop-display"
                                 title: "Match my screen"
-                                description: "Start with wallpapers that exactly match your screen's resolution"
+                                description: "Only show static wallpapers that fit your screen (never limits live wallpapers)"
 
                                 QQC2.Switch {
                                     checked: wizard.matchScreen
@@ -925,6 +956,12 @@ App.ModalCard {
                                     value: wizard.liveEnabled && svwr.installed ? "On · " + wizard.liveDir : "Off"
                                 }
                                 SummaryRow { icon: "security-high"; label: "Safe content only"; value: wizard.safeContent ? "On" : "Off" }
+                                SummaryRow { icon: "view-hidden"; label: "No anime"; value: wizard.noAnime ? "On" : "Off" }
+                                SummaryRow {
+                                    icon: "image-x-generic"
+                                    label: "Use A.I Filtering"
+                                    value: wizard.noAnime && wizard.aiFilter && settings.aiAvailable ? "On" : "Off"
+                                }
                                 SummaryRow { icon: "preferences-desktop-display"; label: "Match my screen"; value: wizard.matchScreen ? "On" : "Off" }
                                 SummaryRow { icon: "edit-copy"; label: "Skip duplicates"; value: wizard.skipDuplicates ? "On" : "Off" }
                                 SummaryRow { icon: "image-x-generic"; label: "Thumbnail cache"; value: wizard.cacheLabel(wizard.cacheSizeMb) }

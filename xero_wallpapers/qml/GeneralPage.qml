@@ -51,8 +51,32 @@ QQC2.ScrollView {
             }
 
             App.SettingsParts.Row {
+                title: "No anime"
+                subtitle: "Hide anime and wallpapers showing people or characters in every source. Ones with vague titles may still slip through."
+
+                QQC2.Switch {
+                    checked: settings.noAnime
+                    onToggled: settings.noAnime = checked
+                }
+            }
+
+            App.SettingsParts.Row {
+                title: "Use A.I Filtering"
+                subtitle: !settings.aiAvailable
+                    ? "Needs the bundled image model and ONNX Runtime (python-onnxruntime-cpu), which aren't installed"
+                    : "With No anime on, an image model on this computer looks at each thumbnail to catch people and "
+                      + "cartoons that titles and tags miss. Nothing is uploaded."
+
+                QQC2.Switch {
+                    enabled: settings.aiAvailable && settings.noAnime
+                    checked: settings.aiFilter && settings.aiAvailable
+                    onToggled: settings.aiFilter = checked
+                }
+            }
+
+            App.SettingsParts.Row {
                 title: "Match my screen"
-                subtitle: "Start with wallpapers that exactly match your primary screen's resolution"
+                subtitle: "Only show static wallpapers that fit your screen: at least its resolution, same shape. Live wallpapers are never limited."
 
                 QQC2.Switch {
                     checked: settings.matchScreen

@@ -1,4 +1,5 @@
 import colorsys
+import math
 import threading
 from dataclasses import replace
 
@@ -27,7 +28,8 @@ def _hsv(hexcode: str) -> tuple[float, float, float]:
 _HSV = {code: _hsv(code) for code in _CHROMATIC}
 
 _SORT = {"newest": "date_added"}
-_MIN_RES = {"1440p": "2560x1440", "4k": "3840x2160", "8k": "7680x4320"}
+# Exact sizes for the lower tiers (the API has no upper bound); 4K is "at least".
+_TIER_SIZES = {"1080p": "1920x1080,1920x1200", "1440p": "2560x1440,2560x1600"}
 def nearest_color(hue: int) -> str:
     def rank(code: str) -> tuple[float, float]:
         h, s, v = _HSV[code]
@@ -90,13 +92,15 @@ class WallhavenSource(Source):
     kind = "static"
     server_filters = frozenset({"query", "sort", "min_res", "ratio", "hue"})
 
-    def __init__(self, safe: bool = True):
+    def __init__(self, safe: bool = True, no_anime: bool = False):
         self.safe = safe
+        self.no_anime = no_anime
 
     def params(self, page: int, f: Filters) -> dict:
         query = " ".join(p for p in [f.query.strip(), *f.tags] if p)
         params = {
             "purity": "100" if self.safe else "110",
+            "categories": "100" if self.no_anime else "111",
             "sorting": _SORT.get(f.sort, "toplist"),
             "page": page,
         }
@@ -104,9 +108,13 @@ class WallhavenSource(Source):
             params["q"] = query
         screen = screen_size(f.min_res)
         if screen:
-            params["resolutions"] = f"{screen[0]}x{screen[1]}"
-        elif f.min_res in _MIN_RES:
-            params["atleast"] = _MIN_RES[f.min_res]
+            w, h = screen
+            params["atleast"] = f"{w}x{h}"
+            params["ratios"] = f"{w // math.gcd(w, h)}x{h // math.gcd(w, h)}"
+        elif f.min_res in _TIER_SIZES:
+            params["resolutions"] = _TIER_SIZES[f.min_res]
+        elif f.min_res == "4k":
+            params["atleast"] = "3840x2160"
         if f.ratio == "ultrawide":
             params["ratios"] = "21x9,32x9"
         elif f.ratio != "any":

@@ -1,16 +1,25 @@
 import configparser
+import logging
 import os
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QGuiApplication, QIcon, QPalette
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPalette
+from PyQt6.QtWidgets import QApplication, QStyleFactory
 
-from . import paths
-
-FALLBACK = "Layan.colors"
-BUNDLED = Path(__file__).resolve().parent / "data" / FALLBACK
+DATA = Path(__file__).resolve().parent / "data"
+SCHEME = DATA / "Layan.colors"
+# Holds Kvantum/kvantum.kvconfig (theme=LayanDark) and the LayanDark theme, laid out like ~/.config.
+KVANTUM_CONFIG = DATA / "kvantum"
+FONTS = DATA / "fonts"
+FONT_FAMILY = "Noto Sans"
+FONT_POINTS = 10
+# Kirigami takes its small font from the desktop, which only Plasma provides; this keeps it the same everywhere.
+SMALL_POINTS = 8
 ICON_THEME = "breeze-dark"
 DISABLED_FADE = 0.55
+
+log = logging.getLogger("xero_wallpapers.theme")
 
 
 def _read(path: Path) -> configparser.ConfigParser:
@@ -29,27 +38,6 @@ def _rgb(value: str) -> tuple[int, int, int] | None:
     except ValueError:
         return None
     return r, g, b
-
-
-def _plasma() -> bool:
-    return "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").split(":")
-
-
-def _system_is_dark() -> bool:
-    if not _plasma():
-        return False
-    kdeglobals = _read(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "kdeglobals")
-    # KColorScheme reads the active colours from kdeglobals; with none written Plasma uses light Breeze defaults.
-    rgb = _rgb(kdeglobals.get("Colors:Window", "BackgroundNormal", fallback=""))
-    return rgb is not None and QColor(*rgb).lightnessF() < 0.5
-
-
-def _fallback_scheme() -> Path:
-    for base in (paths.DATA_HOME, *paths.SYSTEM_DATA_DIRS):
-        candidate = base / "color-schemes" / FALLBACK
-        if candidate.is_file():
-            return candidate
-    return BUNDLED
 
 
 def _palette(scheme: configparser.ConfigParser) -> QPalette:
@@ -95,15 +83,37 @@ def _palette(scheme: configparser.ConfigParser) -> QPalette:
     return pal
 
 
-def apply(app: QGuiApplication):
-    QIcon.setFallbackThemeName(ICON_THEME)
-    if _system_is_dark():
-        return
-    scheme = _fallback_scheme()
-    # Read by KColorScheme, so Kirigami's org.kde.desktop theme and KDE icon recolouring use this scheme.
-    app.setProperty("KDE_COLOR_SCHEME_PATH", str(scheme))
-    app.setPalette(_palette(_read(scheme)))
+def _kvantum():
+    # Kvantum reads its theme from $XDG_CONFIG_HOME/Kvantum only while the style is created, so point it at
+    # the bundled LayanDark for that moment; the user's own Kvantum setup (if any) is never touched.
+    previous = os.environ.get("XDG_CONFIG_HOME")
+    os.environ["XDG_CONFIG_HOME"] = str(KVANTUM_CONFIG)
+    try:
+        return QStyleFactory.create("kvantum")
+    finally:
+        if previous is None:
+            del os.environ["XDG_CONFIG_HOME"]
+        else:
+            os.environ["XDG_CONFIG_HOME"] = previous
+
+
+def _font() -> QFont:
+    if FONT_FAMILY not in QFontDatabase.families():
+        for path in sorted(FONTS.glob("*.ttf")):
+            QFontDatabase.addApplicationFont(str(path))
+    return QFont(FONT_FAMILY, FONT_POINTS)
+
+
+def apply(app: QApplication):
+    style = _kvantum()
+    if style is None:
+        log.warning("Kvantum is not installed; controls fall back to Fusion")
+        style = QStyleFactory.create("Fusion")
+    app.setStyle(style)
+    # Read by KColorScheme, so Kirigami's org.kde.desktop theme and KDE icon recolouring use Layan too.
+    app.setProperty("KDE_COLOR_SCHEME_PATH", str(SCHEME))
+    app.setPalette(_palette(_read(SCHEME)))
+    app.setFont(_font())
     app.styleHints().setColorScheme(Qt.ColorScheme.Dark)
-    # Only Plasma recolours symbolic icons to the forced palette; elsewhere a light theme's glyphs would vanish.
-    if not _plasma() or QIcon.themeName() in ("", "hicolor"):
-        QIcon.setThemeName(ICON_THEME)
+    QIcon.setThemeName(ICON_THEME)
+    QIcon.setFallbackThemeName(ICON_THEME)

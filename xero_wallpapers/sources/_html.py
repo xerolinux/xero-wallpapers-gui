@@ -3,7 +3,7 @@ import re
 import requests
 
 from .. import net
-from .base import SourceError
+from .base import PageNotFound, SourceError
 
 _RES = re.compile(r"(\d{3,5})x(\d{3,5})")
 _SIZE = re.compile(r"([\d.]+)\s*([KMG])B", re.I)
@@ -13,6 +13,8 @@ _UNITS = {"K": 1024, "M": 1024**2, "G": 1024**3}
 def fetch_html(name: str, url: str) -> str:
     try:
         r = net.SESSION.get(url, timeout=net.TIMEOUT)
+        if r.status_code == 404:
+            raise PageNotFound(f"{name} has no page at {url}")
         r.raise_for_status()
         return r.text
     except requests.RequestException as e:

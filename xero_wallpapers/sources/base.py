@@ -4,9 +4,27 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 _SCREEN = re.compile(r"(\d+)x(\d+)")
+# Width / height at or above this counts as ultra-wide (21:9 is 2.33, 32:9 is 3.56).
+ULTRAWIDE_RATIO = 2.3
+# Resolution tiers in ascending order: each runs from its size up to (not including) the next one; 4K is open-ended.
+RES_TIERS = {"1080p": (1920, 1080), "1440p": (2560, 1440), "4k": (3840, 2160)}
+
+
+def in_tier(width: int, height: int, tier: str) -> bool:
+    sizes = list(RES_TIERS.values())
+    i = list(RES_TIERS).index(tier)
+    low_w, low_h = sizes[i]
+    if width < low_w or height < low_h:
+        return False
+    return i + 1 == len(sizes) or not (width >= sizes[i + 1][0] and height >= sizes[i + 1][1])
 
 
 class SourceError(Exception):
+    pass
+
+
+class PageNotFound(SourceError):
+    # Sites (WordPress especially) answer a page past the last one with 404 instead of an empty page.
     pass
 
 
@@ -45,10 +63,12 @@ class Filters:
     sort: Literal["popular", "newest", "res_desc", "res_asc", "size"] = "popular"
     tags: list[str] = field(default_factory=list)
     hue: int | None = None
-    # "any", "1440p", "4k", "8k", or "<W>x<H>" for an exact screen size.
+    # "any", a RES_TIERS key, or "<W>x<H>" for wallpapers that fit that screen.
     min_res: str = "any"
     # "any", "W:H" or "ultrawide".
     ratio: str = "any"
+    # A slug from the source's categories; "" browses everything.
+    category: str = ""
 
 
 def screen_size(min_res: str) -> tuple[int, int] | None:
@@ -64,6 +84,13 @@ class Source(ABC):
     server_filters: frozenset[str] = frozenset()
     # Where item sizes come from: "listed" (search results), "details" (detail pages) or "none".
     sizes: Literal["listed", "details", "none"] = "listed"
+    # Detail pages carry the site's tags; No anime checks them before showing an item.
+    tags_in_details: bool = False
+    # (slug, label) pairs the site can be browsed by; empty when it only has tags.
+    categories: tuple[tuple[str, str], ...] = ()
+
+    def server_keys(self, f: Filters) -> frozenset[str]:
+        return self.server_filters
 
     @abstractmethod
     def search(self, page: int, f: Filters) -> list[Item]: ...

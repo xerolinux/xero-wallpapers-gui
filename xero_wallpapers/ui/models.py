@@ -9,6 +9,11 @@ LABELS = {
     "4kwallpapers": "4K Wallpapers",
     "moewalls": "MoeWalls",
     "motionbgs": "MotionBGs",
+    "hdqwalls": "HDQWalls",
+    "wallpapercave": "WallpaperCave",
+    "desktophut": "DesktopHut",
+    "livewallpapers4free": "LiveWallpapers4Free",
+    "lively": "Lively",
 }
 
 
@@ -35,6 +40,10 @@ def fill_url(url: str, local: bool = False) -> str:
     if not _allowed(url, ("http", "https", "file") if local else ("http", "https")):
         return ""
     return "image://thumb/" + quote("blur\n" + url, safe="")
+
+
+def local_thumb_url(file_url: str) -> str:
+    return "image://thumb/" + quote("local\n" + file_url, safe="") if _allowed(file_url, ("file",)) else ""
 
 
 def cover_url(item: Item) -> str:

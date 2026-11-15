@@ -30,6 +30,12 @@ Item {
     readonly property var activeFilters: {
         const f = browse.filters
         const out = []
+        if (settings.noAnime)
+            out.push({ label: "No anime", action: () => settings.noAnime = false })
+        if (f.category) {
+            const hit = (browse.filterInfo.categories || []).find(c => c.slug === f.category)
+            out.push({ label: hit ? hit.label : f.category, changes: { category: "" } })
+        }
         for (const t of f.tags || [])
             out.push({ label: "#" + t, changes: { tags: f.tags.filter(x => x !== t) } })
         if (typeof f.hue === "number")
@@ -38,9 +44,9 @@ Item {
             out.push({
                 label: f.min_res === browse.screenRes ? "My screen" : f.min_res.replace("x", " × "),
                 changes: { min_res: "any" },
-                tip: "Exactly " + f.min_res.replace("x", " × "),
+                tip: "At least " + f.min_res.replace("x", " × ") + " with the same shape",
             })
-        const res = { "1440p": "1440p+", "4k": "4K+", "8k": "8K" }[f.min_res]
+        const res = { "1080p": "1080p", "1440p": "1440p", "4k": "4K+" }[f.min_res]
         if (res)
             out.push({ label: res, changes: { min_res: "any" } })
         if (f.ratio && f.ratio !== "any")
@@ -138,7 +144,7 @@ Item {
                         text: modelData.label
                         checkable: false
                         closable: true
-                        onRemoved: browse.applyFilters(modelData.changes)
+                        onRemoved: modelData.action ? modelData.action() : browse.applyFilters(modelData.changes)
 
                         QQC2.ToolTip.text: modelData.tip || ""
                         QQC2.ToolTip.visible: hovered && QQC2.ToolTip.text !== ""
@@ -215,7 +221,7 @@ Item {
                             anchors.centerIn: parent
                             text: page.activeFilters.length
                             color: Kirigami.Theme.highlightedTextColor
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font.pointSize: smallPointSize
                             font.weight: Font.DemiBold
                         }
                     }

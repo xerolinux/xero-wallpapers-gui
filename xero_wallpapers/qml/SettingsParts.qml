@@ -69,7 +69,7 @@ QtObject {
                     visible: text !== ""
                     text: row.subtitle
                     color: Kirigami.Theme.disabledTextColor
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font.pointSize: smallPointSize
                     font.family: row.monoSubtitle ? "monospace" : Kirigami.Theme.defaultFont.family
                     elide: Text.ElideRight
                 }

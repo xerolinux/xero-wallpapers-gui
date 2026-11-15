@@ -10,6 +10,9 @@ VERSION=$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' "$ROOT/xero_wallpapers/__init__.p
 WORK=${WORK:-$ROOT/build/appimage}
 SHARE_NAME=xero-wallpaper-browser
 QUICK_SHARUN_URL="https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/refs/heads/main/useful-tools/quick-sharun.sh"
+# CLIP ViT-B/32 image encoder (Xenova/clip-vit-base-patch32, MIT) for the No anime filter, pinned by revision and hash.
+CLIP_URL="https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/onnx/vision_model_quantized.onnx"
+CLIP_SHA256=583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299
 
 export ARCH VERSION
 export APPDIR="$WORK/AppDir"
@@ -42,7 +45,23 @@ PY
 cp -r "$ROOT/xero_wallpaper_browser.py" "$ROOT/xero_logo.png" "$ROOT/xero_wallpapers" "$APPDIR/share/$SHARE_NAME/"
 cp -r "$ROOT/plasma/org.xerolinux.wallpapers.slideshow" "$APPDIR/share/$SHARE_NAME/plasma/"
 find "$APPDIR/share/$SHARE_NAME" -name __pycache__ -type d -prune -exec rm -rf {} +
+# theme.py loads these when the host has no Noto Sans, so text looks the same everywhere.
+mkdir -p "$APPDIR/share/$SHARE_NAME/xero_wallpapers/data/fonts"
+cp /usr/share/fonts/noto/NotoSans-Regular.ttf /usr/share/fonts/noto/NotoSans-Italic.ttf \
+	/usr/share/fonts/noto/NotoSans-Medium.ttf /usr/share/fonts/noto/NotoSans-Bold.ttf \
+	"$APPDIR/share/$SHARE_NAME/xero_wallpapers/data/fonts/"
 find "$APPDIR/share/$SHARE_NAME/plasma" -name '*.frag' -delete
+rm -rf "$APPDIR/share/$SHARE_NAME/xero_wallpapers/data/models"
+ONNX_LIBS=""
+if python3 -c 'import onnxruntime' 2>/dev/null; then
+	CLIP="$WORK/clip-vision.onnx"
+	if ! echo "$CLIP_SHA256  $CLIP" | sha256sum -c --status 2>/dev/null; then
+		curl -fsSL "$CLIP_URL" -o "$CLIP"
+		echo "$CLIP_SHA256  $CLIP" | sha256sum -c -
+	fi
+	install -Dm644 "$CLIP" "$APPDIR/share/$SHARE_NAME/xero_wallpapers/data/models/clip-vision.onnx"
+	ONNX_LIBS=$(find /usr/lib/python3*/site-packages/onnxruntime/capi -name '*.so*')
+fi
 cat > "$APPDIR/bin/$SHARE_NAME" <<'SH'
 #!/bin/sh
 exec python3 "$APPDIR/share/xero-wallpaper-browser/xero_wallpaper_browser.py" "$@"
@@ -66,18 +85,22 @@ KDE_QML_PLUGINS=$(find /usr/lib/qt6/qml/org/kde/kirigami /usr/lib/qt6/qml/org/kd
 # shellcheck disable=SC2086
 "$QUICK_SHARUN" \
 	$KDE_QML_PLUGINS \
+	$ONNX_LIBS \
 	/usr/bin/python3 \
 	/usr/lib/python3*/lib-dynload/_ssl*.so \
 	/usr/lib/python3*/lib-dynload/_hashlib*.so \
 	/usr/lib/python3*/site-packages/PyQt6/sip*.so \
 	/usr/lib/python3*/site-packages/PyQt6/QtCore.abi3.so \
 	/usr/lib/python3*/site-packages/PyQt6/QtGui.abi3.so \
+	/usr/lib/python3*/site-packages/PyQt6/QtWidgets.abi3.so \
 	/usr/lib/python3*/site-packages/PyQt6/QtNetwork.abi3.so \
 	/usr/lib/python3*/site-packages/PyQt6/QtQml.abi3.so \
 	/usr/lib/python3*/site-packages/PyQt6/QtQuick.abi3.so \
 	/usr/lib/python3*/site-packages/PyQt6/QtDBus.abi3.so \
 	/usr/lib/python3*/site-packages/PIL/*.so \
 	/usr/lib/qt6/plugins/multimedia \
+	/usr/lib/qt6/plugins/styles/libkvantum.so \
+	/usr/lib/qt6/plugins/wayland-decoration-client \
 	/usr/lib/qt6/plugins/kf6/kirigami
 
 # Breeze Dark (and Breeze, which it inherits) for hosts without a Breeze icon theme.

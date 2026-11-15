@@ -12,6 +12,8 @@ pacman -Syu --noconfirm --needed \
 	breeze-icons \
 	curl \
 	kirigami \
+	kvantum \
+	noto-fonts \
 	python \
 	python-beautifulsoup4 \
 	python-pillow \
@@ -26,5 +28,10 @@ pacman -Syu --noconfirm --needed \
 	qt6-multimedia-ffmpeg \
 	qt6-svg \
 	qt6-wayland
+
+# The No anime image check; Arch Linux ARM has no onnxruntime, so aarch64 builds fall back to words and tags.
+if [ "$(uname -m)" = x86_64 ]; then
+	pacman -S --noconfirm --needed python-numpy python-onnxruntime-cpu
+fi
 
 get-debloated-pkgs --add-common --prefer-nano

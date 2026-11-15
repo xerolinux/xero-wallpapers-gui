@@ -102,7 +102,7 @@ Rectangle {
         color: Kirigami.Theme.disabledTextColor
         font.capitalization: Font.AllUppercase
         font.letterSpacing: 1.2
-        font.pointSize: Kirigami.Theme.smallFont.pointSize
+        font.pointSize: smallPointSize
         font.weight: Font.DemiBold
     }
 
@@ -343,7 +343,7 @@ Rectangle {
                             text: page.dims(page.crop.w, page.crop.h)
                             color: "white"
                             font.weight: Font.DemiBold
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font.pointSize: smallPointSize
                             visible: editor.srcW > 0
                         }
 
@@ -376,7 +376,7 @@ Rectangle {
                     QQC2.Label {
                         text: "Fit · " + Math.round(picture.k * 100) + "%"
                         color: Kirigami.Theme.disabledTextColor
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font.pointSize: smallPointSize
                     }
                 }
             }
@@ -513,7 +513,7 @@ Rectangle {
                             visible: !editor.aiAvailable
                             text: "Real-ESRGAN: " + editor.aiUnavailableReason
                             color: Kirigami.Theme.neutralTextColor
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font.pointSize: smallPointSize
                             wrapMode: Text.WordWrap
                         }
 
@@ -521,7 +521,7 @@ Rectangle {
                             Layout.fillWidth: true
                             text: editor.hint
                             color: Kirigami.Theme.disabledTextColor
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font.pointSize: smallPointSize
                             wrapMode: Text.WordWrap
                         }
 
@@ -606,7 +606,7 @@ Rectangle {
                             visible: text !== ""
                             text: editor.summary.note || ""
                             color: Kirigami.Theme.disabledTextColor
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font.pointSize: smallPointSize
                             wrapMode: Text.WordWrap
                         }
 

@@ -30,9 +30,10 @@ Item {
         return frames[path] || null
     }
 
-    function needsFrame(path) {
+    // Frames saved on earlier visits come in as modelData.frame; only new clips are played to grab one.
+    function needsFrame(item) {
         frameVersion
-        return !(path in frames) && !(path in failedFrames)
+        return !item.frame && !(item.path in frames) && !(item.path in failedFrames)
     }
 
     function storeFrame(path, result) {
@@ -258,7 +259,7 @@ Item {
         readonly property int radius: Kirigami.Units.cornerRadius * 2
         readonly property bool live: page.kind === "live"
         readonly property var frame: live ? page.frameFor(modelData.path) : null
-        readonly property bool wantsPlayer: live && page.visible && page.needsFrame(modelData.path)
+        readonly property bool wantsPlayer: live && page.visible && page.needsFrame(modelData)
         property bool holding: false
 
         function tryStart() {
@@ -339,7 +340,7 @@ Item {
             anchors.fill: parent
             anchors.margins: card.modelData.isCurrent || card.hovered ? 2 : 0
             radius: card.radius - anchors.margins
-            source: card.live ? (card.frame ? card.frame.url : "") : card.modelData.url
+            source: card.live ? (card.frame ? card.frame.url : card.modelData.frame) : card.modelData.thumb
             fillSource: card.live ? source : card.modelData.fill
             blurFill: card.live
             // Grabbed frames are already card-sized and reject sourceSize.
@@ -362,7 +363,7 @@ Item {
                 anchors.centerIn: parent
                 text: "Current"
                 color: Kirigami.Theme.highlightedTextColor
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                font.pointSize: smallPointSize
                 font.weight: Font.DemiBold
             }
         }

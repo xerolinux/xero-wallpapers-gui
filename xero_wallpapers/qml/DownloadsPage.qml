@@ -33,7 +33,7 @@ QQC2.ScrollView {
         topPadding: Kirigami.Units.smallSpacing
         bottomPadding: topPadding
         font.family: "monospace"
-        font.pointSize: Kirigami.Theme.smallFont.pointSize
+        font.pointSize: smallPointSize
         elide: Text.ElideMiddle
         background: Rectangle {
             radius: Kirigami.Units.cornerRadius

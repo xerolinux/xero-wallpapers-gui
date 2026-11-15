@@ -9,7 +9,24 @@ from .base import Filters, Item, Source, SourceError
 
 BASE = "https://moewalls.com"
 NAME = "moewalls"
+# The ultra-wide size with by far the most clips on the site.
+ULTRAWIDE_RESOLUTION = "3440x1440"
 DOWNLOAD = "https://go.moewalls.com/download.php?video="
+CATEGORIES = (
+    ("anime", "Anime"),
+    ("games", "Games"),
+    ("fantasy", "Fantasy"),
+    ("landscape", "Landscape"),
+    ("sci-fi", "Sci-Fi"),
+    ("lifestyle", "Lifestyle"),
+    ("movies", "Movies"),
+    ("abstract", "Abstract"),
+    ("vehicle", "Vehicle"),
+    ("pixel-art", "Pixel Art"),
+    ("animal", "Animal"),
+    ("others", "Others"),
+)
+_LABELS = dict(CATEGORIES)
 
 
 def parse_list(html: str) -> list[Item]:
@@ -71,21 +88,33 @@ def parse_detail(html: str, item: Item) -> Item:
         fields["uploaded"] = date.get_text().replace("Date", "", 1).strip()
     tags = [a.get_text(strip=True) for a in soup.select(".tag-items a")]
     if tags:
-        fields["tags"] = tags
+        fields["tags"] = list(dict.fromkeys([*tags, *item.tags]))
     return replace(item, **fields)
 
 
 class MoeWallsSource(Source):
     name = NAME
     kind = "live"
-    server_filters = frozenset({"query"})
+    server_filters = frozenset({"query", "category", "ratio"})
     sizes = "details"
+    categories = CATEGORIES
+    tags_in_details = True
 
     def search(self, page: int, f: Filters) -> list[Item]:
-        url = f"{BASE}/page/{page}/"
-        if f.query.strip():
-            url += f"?s={quote(f.query.strip())}"
-        return parse_list(fetch_html("MoeWalls", url))
+        label = _LABELS.get(f.category)
+        query = f.query.strip()
+        if label:
+            url = f"{BASE}/category/{f.category}/page/{page}/"
+        elif f.ratio == "ultrawide" and not query:
+            url = f"{BASE}/resolution/{ULTRAWIDE_RESOLUTION}/page/{page}/"
+        else:
+            url = f"{BASE}/page/{page}/"
+        if query:
+            url += f"?s={quote(query)}"
+        items = parse_list(fetch_html("MoeWalls", url))
+        if label:
+            items = [replace(i, tags=[*i.tags, label.lower()]) for i in items]
+        return items
 
     def details(self, item: Item) -> Item:
         return parse_detail(fetch_html("MoeWalls", item.page_url), item)

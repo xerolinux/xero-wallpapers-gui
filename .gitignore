@@ -6,6 +6,10 @@ __pycache__/
 .superpowers/
 docs/designs/gifs/
 
+# CLIP model for No anime: fetched with a pinned checksum by the PKGBUILD and the AppImage build.
+/xero_wallpapers/data/models/
+*.onnx
+
 # makepkg
 /src/
 /pkg/

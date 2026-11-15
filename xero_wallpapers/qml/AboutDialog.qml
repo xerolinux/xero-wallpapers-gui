@@ -69,7 +69,7 @@ App.ModalCard {
                 Layout.fillWidth: true
                 text: link.url.replace(/^https:\/\/(github\.com\/)?/, "")
                 color: Kirigami.Theme.disabledTextColor
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                font.pointSize: smallPointSize
                 elide: Text.ElideRight
             }
         }
@@ -175,14 +175,14 @@ App.ModalCard {
                         text: "Version " + appVersion
                         color: Kirigami.Theme.highlightColor
                         font.weight: Font.DemiBold
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font.pointSize: smallPointSize
                     }
                 }
 
                 QQC2.Label {
                     text: "GPL-3.0"
                     color: Kirigami.Theme.disabledTextColor
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font.pointSize: smallPointSize
                 }
             }
 
@@ -220,7 +220,7 @@ App.ModalCard {
                     Layout.fillWidth: true
                     text: "Built with AI help · Made for the XeroLinux community"
                     color: Kirigami.Theme.disabledTextColor
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font.pointSize: smallPointSize
                     elide: Text.ElideRight
                 }
 

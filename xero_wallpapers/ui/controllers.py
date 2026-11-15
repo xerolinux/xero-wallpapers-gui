@@ -20,23 +20,44 @@ from PIL import Image
 from PyQt6.QtCore import QBuffer, QFile, QObject, QProcess, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QDesktopServices, QGuiApplication, QImage
 
-from .. import dupes, kpackage, library, net, paths, slideshow, svwr, update, upscale, wallpaper
+from .. import dupes, kpackage, library, net, paths, slideshow, svwr, update, upscale, vision, wallpaper
+from ..anime import HIDDEN_CATEGORIES, blocked
 from ..colors import hue_matches, palette
 from ..config import Config
 from ..downloads import SAFE_SCHEMES, DownloadCancelled, already_downloaded, download
 from ..naming import apply_renames, propose_renames, title_from_tags
 from ..sources import custom
-from ..sources.base import Filters, Item, Source, SourceError, screen_size
+from ..sources.base import (
+    RES_TIERS,
+    ULTRAWIDE_RATIO,
+    Filters,
+    Item,
+    PageNotFound,
+    Source,
+    SourceError,
+    in_tier,
+    screen_size,
+)
 from ..sources.custom import validate_custom
 from ..sources.registry import BUILTINS
 from ..tags import RateLimiter, Stopped, WorkQueue
 from ..wallpaper import WallpaperError, set_live, set_static
-from .models import WallpaperModel, cover_url, fill_url, source_label, thumb_url
-from .thumbs import CACHE_SIZES_MB, THUMB_EXECUTOR, cache_dir, cached_bytes, clear_cache, evict, set_disk_cap
+from .models import WallpaperModel, cover_url, fill_url, local_thumb_url, source_label, thumb_url
+from .thumbs import (
+    CACHE_SIZES_MB,
+    THUMB_EXECUTOR,
+    cache_dir,
+    cached_bytes,
+    clear_cache,
+    evict,
+    frame_path,
+    local_thumb_bytes,
+    set_disk_cap,
+    store_frame,
+)
 
 log = logging.getLogger("xero_wallpapers.browse")
 
-MIN_RES = {"1440p": (2560, 1440), "4k": (3840, 2160), "8k": (7680, 4320)}
 LOCAL_SORTS = {
     "res_desc": (lambda i: i.width * i.height, True),
     "res_asc": (lambda i: i.width * i.height, False),
@@ -45,7 +66,6 @@ LOCAL_SORTS = {
 FILTER_KEYS = {f.name for f in fields(Filters)}
 MAX_AUTO_PAGES = 4
 FILL_ROWS = 24
-ULTRAWIDE = 2.3
 RATIO_TOLERANCE = 0.02
 SIZE_CALLS_PER_MINUTE = 30
 TOP_TAGS = 10
@@ -69,7 +89,7 @@ def pick_featured(items: list[Item]) -> Item | None:
 def _ratio_ok(width: int, height: int, ratio: str) -> bool:
     value = width / height
     if ratio == "ultrawide":
-        return value >= ULTRAWIDE
+        return value >= ULTRAWIDE_RATIO
     try:
         w, h = (float(p) for p in ratio.split(":"))
     except ValueError:
@@ -83,8 +103,21 @@ def _sized(f: Filters, source: Source) -> bool:
 
 
 # "yes", "no", or "size" / "colour" while that is still unknown.
-def _verdict(item: Item, f: Filters, source: Source) -> str:
-    server = source.server_filters
+# seen: the vision verdict per thumbnail URL (True hides); only consulted when No anime is on.
+def _verdict(item: Item, f: Filters, source: Source, no_anime: bool = False, seen: dict | None = None) -> str:
+    if no_anime:
+        if blocked(item):
+            return "no"
+        if seen is not None and item.thumb_url:
+            hit = seen.get(item.thumb_url)
+            if hit is None:
+                return "vision"
+            if hit:
+                return "no"
+        # Strict: titles alone miss most character names, so wait for the site's own tags.
+        if source.tags_in_details and not item.extra.get("checked"):
+            return "tags"
+    server = source.server_keys(f)
     if "query" not in server and f.query.strip():
         q = f.query.strip().lower()
         if q not in item.title.lower() and not any(q in t.lower() for t in item.tags):
@@ -99,12 +132,12 @@ def _verdict(item: Item, f: Filters, source: Source) -> str:
             return "size" if source.sizes == "details" else "no"
         screen = screen_size(f.min_res)
         if screen:
-            if (item.width, item.height) != screen:
+            # Fits the screen: at least as large and the same shape, so it scales without bars or crop.
+            if (item.width < screen[0] or item.height < screen[1]
+                    or not _ratio_ok(item.width, item.height, f"{screen[0]}:{screen[1]}")):
                 return "no"
-        else:
-            w, h = MIN_RES.get(f.min_res, (0, 0))
-            if item.width < w or item.height < h:
-                return "no"
+        elif f.min_res in RES_TIERS and not in_tier(item.width, item.height, f.min_res):
+            return "no"
         if f.ratio != "any" and not _ratio_ok(item.width, item.height, f.ratio):
             return "no"
     if f.hue is not None:
@@ -115,8 +148,9 @@ def _verdict(item: Item, f: Filters, source: Source) -> str:
     return "yes"
 
 
-def _strict(f: Filters) -> bool:
-    return bool(f.tags) or f.hue is not None or f.min_res != "any" or f.ratio != "any"
+def _strict(f: Filters, source: Source) -> bool:
+    local_query = bool(f.query.strip()) and "query" not in source.server_keys(f)
+    return local_query or bool(f.tags) or f.hue is not None or f.min_res != "any" or f.ratio != "any"
 
 
 def _thumb_palette(url: str) -> list[str]:
@@ -146,10 +180,12 @@ def _filters_from(base: Filters, changes: dict) -> Filters:
     return Filters(**values)
 
 
-def _filter_info(items: list[Item], source: Source | None) -> dict:
+def _filter_info(items: list[Item], source: Source | None, no_anime: bool) -> dict:
     tags = Counter(t for i in items for t in dict.fromkeys(t.lower() for t in i.tags))
+    categories = source.categories if source is not None else ()
     return {
         "tags": [t for t, _ in tags.most_common(TOP_TAGS)],
+        "categories": [{"slug": k, "label": v} for k, v in categories if not (no_anime and k in HIDDEN_CATEGORIES)],
         "resolution": source is not None and source.sizes != "none",
     }
 
@@ -159,6 +195,7 @@ class BrowseController(QObject):
     _tagged = pyqtSignal(int, str, list)
     _sizedUp = pyqtSignal(int, str, object)
     _coloured = pyqtSignal(int, str, list)
+    _looked = pyqtSignal(int, str, bool)
     _fingerprinted = pyqtSignal(str, object)
     checkingChanged = pyqtSignal()
     sourcesChanged = pyqtSignal()
@@ -173,9 +210,11 @@ class BrowseController(QObject):
 
     def __init__(
         self, sources: list[Source], live_enabled: bool = False, tags=None, min_res: str = "any", screen: str = "",
-        hide_duplicates: bool = True, parent=None,
+        hide_duplicates: bool = True, no_anime: bool = False, ai_filter: bool = True, parent=None,
     ):
         super().__init__(parent)
+        self._no_anime = no_anime
+        self._ai = ai_filter
         self._tags = tags
         self._hide = hide_duplicates
         self._registry = {"static": dupes.Registry(), "live": dupes.Registry()}
@@ -186,9 +225,11 @@ class BrowseController(QObject):
         self._hold_timer.setSingleShot(True)
         self._hold_timer.setInterval(DUPE_HOLD_MS)
         self._hold_timer.timeout.connect(lambda: self._drain(force=True))
-        self._sizes = WorkQueue(RateLimiter(max_calls=SIZE_CALLS_PER_MINUTE, stop=net.STOP), "size-check")
+        # One budget per site: browsing one source must not stall size checks on the next.
+        self._sizes: dict[str, WorkQueue] = {}
         self._known_sizes: dict[str, Item] = {}
         self._known_colors: dict[str, list[str]] = {}
+        self._seen: dict[str, bool] = {}
         self._waiting: list[tuple[str, Item]] = []
         self._auto_pages = 0
         self._live_enabled = live_enabled
@@ -213,11 +254,12 @@ class BrowseController(QObject):
         self._done = False
         self._raw: list[Item] = []
         self._all: list[Item] = []
-        self._info = _filter_info([], None)
+        self._info = _filter_info([], None, no_anime)
         self._loaded.connect(self._on_loaded)
         self._tagged.connect(self._on_tagged)
         self._sizedUp.connect(self._on_sized)
         self._coloured.connect(self._on_coloured)
+        self._looked.connect(self._on_looked)
         self._fingerprinted.connect(self._on_fingerprinted)
         self._reload(clear=True)
 
@@ -287,6 +329,8 @@ class BrowseController(QObject):
         need = {why for why, _ in self._waiting}
         if "size" in need:
             return "Checking sizes..."
+        if need & {"tags", "vision"}:
+            return "Checking content..."
         return "Checking colours..." if need else ""
 
     @pyqtSlot(str)
@@ -305,6 +349,9 @@ class BrowseController(QObject):
         if source.kind != self._mode:
             self._enter_mode(source.kind)
         self._current[self._mode] = name
+        if self._filters.category:
+            self._filters = replace(self._filters, category="")
+            self.filtersChanged.emit()
         self.currentSourceChanged.emit()
         self._reload(clear=True)
 
@@ -319,6 +366,12 @@ class BrowseController(QObject):
     @pyqtSlot("QVariantMap")
     def applyFilters(self, changes: dict):
         self._filters = _filters_from(self._filters, changes)
+        if self._mode == "live" and screen_size(self._filters.min_res):
+            self._filters = replace(self._filters, min_res="any")
+        if self._filters.ratio == "ultrawide" and self._filters.min_res != "any":
+            self._filters = replace(self._filters, ratio="any")
+        if self._no_anime and self._filters.category in HIDDEN_CATEGORIES:
+            self._filters = replace(self._filters, category="")
         self.filtersChanged.emit()
         self._reload(clear=False)
 
@@ -329,22 +382,42 @@ class BrowseController(QObject):
         self._registry = {"static": dupes.Registry(), "live": dupes.Registry()}
         self._reload(clear=True)
 
+    def set_no_anime(self, on: bool):
+        if on != self._no_anime:
+            self._no_anime = on
+            if on and self._filters.category in HIDDEN_CATEGORIES:
+                self._filters = replace(self._filters, category="")
+                self.filtersChanged.emit()
+            self._reload(clear=True)
+
+    def set_ai_filter(self, on: bool):
+        if on != self._ai:
+            self._ai = on
+            if self._no_anime:
+                self._reload(clear=True)
+
+    def _vision_seen(self) -> dict | None:
+        return self._seen if self._ai and vision.installed() else None
+
     def set_match_screen(self, on: bool):
         previous, new = ("any", self._screen) if on else (self._screen, "any")
         if not screen_size(self._screen):
             return
         self._defaults = replace(self._defaults, min_res=new)
-        for mode, f in self._by_mode.items():
-            if f.min_res == previous:
-                self._by_mode[mode] = replace(f, min_res=new)
-        if self._filters.min_res == previous:
+        if self._mode != "static":
+            f = self._by_mode.get("static")
+            if f is not None and f.min_res == previous:
+                self._by_mode["static"] = replace(f, min_res=new)
+        elif self._filters.min_res == previous:
             self.applyFilters({"min_res": new})
 
     def _enter_mode(self, mode: str):
         # Each mode keeps its own filters: live sources list no colours or tags and few sizes,
         # so static filters carried over would empty the page. Only the search text is shared.
         self._by_mode[self._mode] = self._filters
-        self._filters = replace(self._by_mode.get(mode, self._defaults), query=self._filters.query)
+        # Live clips rarely match a screen exactly, so Match my screen is for static wallpapers only.
+        defaults = self._defaults if mode == "static" else replace(self._defaults, min_res="any")
+        self._filters = replace(self._by_mode.get(mode, defaults), query=self._filters.query)
         self._mode = mode
         self.modeChanged.emit()
         self.filtersChanged.emit()
@@ -386,13 +459,14 @@ class BrowseController(QObject):
         self._page = 0
         self._done = False
         self._auto_pages = 0
-        self._sizes.clear()
+        for queue in self._sizes.values():
+            queue.clear()
         self._set_waiting([])
         self._held = []
         self._hold_timer.stop()
         if clear:
             self._raw = []
-            self._set_all([], None)
+            self._set_all([])
             self._model.set_items([])
             self._featured = {}
             self.featuredChanged.emit()
@@ -406,12 +480,14 @@ class BrowseController(QObject):
         self._set_error("")
         gen = self._gen
         server = Filters(
-            **{k: v for k, v in asdict(self._filters).items() if k in source.server_filters}
+            **{k: v for k, v in asdict(self._filters).items() if k in source.server_keys(self._filters)}
         )
 
         def work():
             try:
                 items, error = source.search(page, server), ""
+            except PageNotFound as e:
+                items, error = [], "" if page > 1 else str(e)
             except SourceError as e:
                 items, error = [], str(e) or "unknown error"
             except Exception as e:
@@ -437,10 +513,10 @@ class BrowseController(QObject):
         for item in items:
             if not item.colors and item.thumb_url in self._known_colors:
                 item.colors = self._known_colors[item.thumb_url]
-        self._set_all(items if page == 1 else self._all + items, source)
+        self._set_all(items if page == 1 else self._all + items)
         fresh, waiting = [], []
         for item in items:
-            verdict = _verdict(item, self._filters, source)
+            verdict = _verdict(item, self._filters, source, self._no_anime, self._vision_seen())
             if verdict == "yes":
                 fresh.append(item)
             elif verdict != "no":
@@ -551,9 +627,25 @@ class BrowseController(QObject):
             self.checkingChanged.emit()
 
     def _check(self, gen: int, why: str, item: Item, source: Source):
-        if why == "size":
-            self._sizes.request(item.page_url, lambda: source.details(item),
-                                lambda url, found: _safe_emit(self._sizedUp, gen, url, found))
+        if why == "vision":
+            url = item.thumb_url
+
+            def look():
+                try:
+                    hit = bool(vision.looks_blocked(cached_bytes(url)))
+                except Exception as e:
+                    log.debug("vision check for %s failed: %s", url, e)
+                    hit = False
+                _safe_emit(self._looked, gen, url, hit)
+
+            vision.EXECUTOR.submit(look)
+        elif why in ("size", "tags"):
+            queue = self._sizes.get(source.name)
+            if queue is None:
+                limiter = RateLimiter(max_calls=SIZE_CALLS_PER_MINUTE, stop=net.STOP)
+                queue = self._sizes[source.name] = WorkQueue(limiter, f"size-check-{source.name}")
+            queue.request(item.page_url, lambda: source.details(item),
+                          lambda url, found: _safe_emit(self._sizedUp, gen, url, found))
         else:
             url = item.thumb_url
 
@@ -571,9 +663,14 @@ class BrowseController(QObject):
         if gen != self._gen:
             return
         if found is not None and found.width > 0 and found.height > 0:
-            self._known_sizes[url] = found
+            self._known_sizes[url] = replace(found, extra={**found.extra, "checked": True})
         self._resolve(lambda item: item.page_url == url,
                       lambda item: self._known_sizes.get(url) or replace(item, width=-1, height=-1))
+
+    def _on_looked(self, gen: int, url: str, hit: bool):
+        self._seen[url] = hit
+        if gen == self._gen:
+            self._resolve(lambda item: item.thumb_url == url, lambda item: item)
 
     def _on_coloured(self, gen: int, url: str, colors: list):
         if gen != self._gen:
@@ -596,7 +693,7 @@ class BrowseController(QObject):
                 continue
             item = update(item)
             # A failed size check leaves -1: it stays out instead of being fetched again.
-            verdict = "no" if item.width < 0 else _verdict(item, self._filters, source)
+            verdict = "no" if item.width < 0 else _verdict(item, self._filters, source, self._no_anime, self._vision_seen())
             if verdict == "yes":
                 admit.append(item)
             elif verdict != "no":
@@ -608,7 +705,7 @@ class BrowseController(QObject):
 
     def _maybe_fill(self):
         if (self._busy or self._done or self._error or self._waiting or not self._page
-                or not _strict(self._filters) or self._model.rowCount() >= FILL_ROWS
+                or not (self._no_anime or _strict(self._filters, self._source(self.currentSource))) or self._model.rowCount() >= FILL_ROWS
                 or self._auto_pages >= MAX_AUTO_PAGES):
             return
         self._auto_pages += 1
@@ -625,7 +722,14 @@ class BrowseController(QObject):
         for item in self._all:
             if item.source == "wallhaven" and item.extra.get("id") == wid:
                 item.tags = list(tags)
-        self._set_all(self._all, self._source(self.currentSource))
+        self._set_all(self._all)
+        if self._no_anime:
+            # Wallhaven tags arrive after the page is shown, so No anime re-checks those wallpapers now.
+            for row in reversed(range(self._model.rowCount())):
+                item = self._model.item(row)
+                if item.source == "wallhaven" and item.extra.get("id") == wid and blocked(replace(item, tags=tags)):
+                    self._model.remove(row)
+                    self._raw = [i for i in self._raw if i is not item]
         title = title_from_tags(tags)
         if not title:
             return
@@ -637,9 +741,9 @@ class BrowseController(QObject):
                     self._featured = {**self._featured, "title": title}
                     self.featuredChanged.emit()
 
-    def _set_all(self, items: list[Item], source: Source | None):
+    def _set_all(self, items: list[Item]):
         self._all = list(items)
-        info = _filter_info(self._all, source)
+        info = _filter_info(self._all, self._source(self.currentSource), self._no_anime)
         if info != self._info:
             self._info = info
             self.filterInfoChanged.emit()
@@ -1332,6 +1436,11 @@ BUILTIN_URLS = {
     "4kwallpapers": "4kwallpapers.com/search/?text={query}",
     "moewalls": "moewalls.com/page/{page}/?s={query}",
     "motionbgs": "motionbgs.com/{page}/?s={query}",
+    "hdqwalls": "hdqwalls.com/search?q={query}&page={page}",
+    "wallpapercave": "wallpapercave.com/search?q={query}",
+    "desktophut": "desktophut.com/search/{query}?page={page}",
+    "livewallpapers4free": "livewallpapers4free.com/page/{page}/?s={query}",
+    "lively": "livelywallpaper.app/live-wallpapers/",
 }
 DIR_KEYS = {"static": "static_download_dir", "live": "live_download_dir"}
 SLIDE_OPTIONS = {
@@ -1422,6 +1531,8 @@ class SettingsController(QObject):
     togglesChanged = pyqtSignal()
     sourcesChanged = pyqtSignal()
     matchScreenChanged = pyqtSignal()
+    noAnimeChanged = pyqtSignal()
+    aiFilterChanged = pyqtSignal()
     hideDuplicatesChanged = pyqtSignal()
     setupRequested = pyqtSignal()
     cacheCleared = pyqtSignal(str)
@@ -1526,6 +1637,29 @@ class SettingsController(QObject):
     safeContent = pyqtProperty(
         bool, lambda self: bool(self._config.get("safe_content")), _set_safe, notify=togglesChanged,
     )
+
+    def _set_no_anime(self, value: bool):
+        if bool(value) != bool(self._config.get("no_anime")):
+            self._set_toggle("no_anime", value)
+            self.noAnimeChanged.emit()
+            self.sourcesChanged.emit()
+
+    noAnime = pyqtProperty(
+        bool, lambda self: bool(self._config.get("no_anime")), _set_no_anime, notify=togglesChanged,
+    )
+
+    def _set_ai(self, value: bool):
+        if bool(value) != bool(self._config.get("ai_filter")):
+            self._set_toggle("ai_filter", value)
+            self.aiFilterChanged.emit()
+
+    aiFilter = pyqtProperty(
+        bool, lambda self: bool(self._config.get("ai_filter")), _set_ai, notify=togglesChanged,
+    )
+
+    @pyqtProperty(bool, constant=True)
+    def aiAvailable(self):
+        return vision.installed()
 
     def _set_match(self, value: bool):
         if bool(value) != bool(self._config.get("match_screen")):
@@ -1717,7 +1851,7 @@ class SettingsController(QObject):
         for kind in ("static", "live"):
             if choices.get(kind + "Dir"):
                 self.setDir(kind, str(choices[kind + "Dir"]))
-        for prop in ("liveEnabled", "safeContent", "matchScreen", "skipDuplicates", "cacheSizeMb"):
+        for prop in ("liveEnabled", "safeContent", "noAnime", "aiFilter", "matchScreen", "skipDuplicates", "cacheSizeMb"):
             if prop in choices:
                 setattr(self, prop, choices[prop])
         self.skipSetup()
@@ -1793,14 +1927,32 @@ class SettingsController(QObject):
         self.setSourceEnabled(name, True)
 
 
+def _warm_thumb(path: Path):
+    try:
+        local_thumb_bytes(path)
+    except Exception as e:
+        log.debug("thumbnail for %s failed: %s", path, e)
+
+
+def _cached_frame(video: Path) -> str:
+    try:
+        frame = frame_path(video)
+    except OSError:
+        return ""
+    return QUrl.fromLocalFile(str(frame)).toString() if frame.is_file() else ""
+
+
 def _library_row(p: Path, kind: str, current: set[str]) -> dict:
     url = QUrl.fromLocalFile(str(p)).toString()
+    static = kind == "static"
     return {
         "path": str(p),
         "url": url,
         "name": p.name,
         "isCurrent": str(p) in current,
-        "fill": fill_url(url, local=True) if kind == "static" else "",
+        "thumb": local_thumb_url(url) if static else "",
+        "frame": "" if static else _cached_frame(p),
+        "fill": fill_url(url, local=True) if static else "",
     }
 
 
@@ -1918,6 +2070,9 @@ class LibraryController(QObject):
                     copies = {kind: scan[1] for kind, scan in scans.items()}
                     if not compute:
                         _safe_emit(self._scanned, -gen, rows, copies)
+                        # Build the tile thumbnails now so the first visit to the Library is quick too.
+                        for row in rows["static"]:
+                            THUMB_EXECUTOR.submit(_warm_thumb, Path(row["path"]))
             except Exception:
                 log.exception("library scan failed")
             finally:
@@ -1941,6 +2096,10 @@ class LibraryController(QObject):
         frame = image.copy()
 
         def work():
+            try:
+                store_frame(Path(path), frame)
+            except OSError as e:
+                log.debug("saving the frame of %s failed: %s", path, e)
             buf = QBuffer()
             buf.open(QBuffer.OpenModeFlag.WriteOnly)
             frame.save(buf, "PNG")

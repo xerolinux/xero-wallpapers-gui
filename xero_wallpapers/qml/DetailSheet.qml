@@ -81,7 +81,7 @@ Kirigami.Dialog {
         color: Kirigami.Theme.disabledTextColor
         font.capitalization: Font.AllUppercase
         font.letterSpacing: 1.2
-        font.pointSize: Kirigami.Theme.smallFont.pointSize
+        font.pointSize: smallPointSize
         font.weight: Font.DemiBold
     }
 

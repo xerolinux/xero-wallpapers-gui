@@ -117,7 +117,7 @@ QQC2.ScrollView {
                         visible: page.cardState === "missing" || page.cardState === "done"
                         wrapMode: Text.WordWrap
                         color: Kirigami.Theme.disabledTextColor
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font.pointSize: smallPointSize
                         text: page.cardState === "done"
                             ? (svwr.updateAvailable ? "Version " + svwr.latest + " is available" : "Ready to use")
                             : "Plasma wallpaper plugin by luisbocanegra\ngithub.com/luisbocanegra/plasma-smart-video-wallpaper-reborn"
@@ -137,7 +137,7 @@ QQC2.ScrollView {
                         text: svwr.stage
                         elide: Text.ElideRight
                         font.family: "monospace"
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font.pointSize: smallPointSize
                         color: Kirigami.Theme.disabledTextColor
                     }
 
@@ -148,7 +148,7 @@ QQC2.ScrollView {
                         wrapMode: Text.WrapAnywhere
                         maximumLineCount: 15
                         font.family: "monospace"
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font.pointSize: smallPointSize
                     }
                 }
 

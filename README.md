@@ -8,7 +8,7 @@
   <img src="assets/demo.gif" alt="Xero Wallpapers in action" width="960">
 </p>
 
-Xero Wallpapers is a KDE Plasma app for finding, previewing and setting wallpapers. Browse Wallhaven and 4K Wallpapers (plus MoeWalls and MotionBGs for live wallpapers), filter by tags, colour, resolution and aspect ratio, flip through results in a fullscreen coverflow, crop and upscale images, and keep everything in a local library. On Plasma it can also rotate your wallpapers with its own slideshow plugin and play live wallpapers through Smart Video Wallpaper Reborn. It is built with PyQt6, QML and Kirigami, and is always dark: it follows your Plasma colour scheme when it's dark; light schemes are replaced by Layan.
+Xero Wallpapers is a KDE Plasma app for finding, previewing and setting wallpapers. Browse 4K Wallpapers, HDQWalls, WallpaperCave and Wallhaven (plus DesktopHut, LiveWallpapers4Free, Lively, MoeWalls and MotionBGs for live wallpapers), filter by tags, colour, resolution and aspect ratio, hide anime and people (checked on-device by an image model), flip through results in a fullscreen coverflow, crop and upscale images, and keep everything in a local library. On Plasma it can also rotate your wallpapers with its own slideshow plugin and play live wallpapers through Smart Video Wallpaper Reborn. It is built with PyQt6, QML and Kirigami, and looks the same on every desktop (Plasma, GNOME, XFCE, Cinnamon, Hyprland, Niri and others): it always uses its own Layan dark colours, Kvantum LayanDark controls, Breeze Dark icons and Noto Sans.
 
 ## Install on XeroLinux
 
@@ -44,7 +44,9 @@ Optional on every distro: `vulkan-tools` (finds a dedicated GPU for AI upscaling
 
 ## Credits
 
-The bundled fallback colour scheme `xero_wallpapers/data/Layan.colors` is from [Layan](https://github.com/vinceliuice/Layan-kde) by vinceliuice (GPL-3.0).
+The bundled colour scheme `xero_wallpapers/data/Layan.colors` and Kvantum theme `xero_wallpapers/data/kvantum/Kvantum/LayanDark` are from [Layan](https://github.com/vinceliuice/Layan-kde) by vinceliuice (GPL-3.0).
+
+The No anime filter checks thumbnails on your machine with the [CLIP ViT-B/32](https://huggingface.co/Xenova/clip-vit-base-patch32) image encoder (OpenAI, ONNX build by Xenova, MIT), run by ONNX Runtime; nothing is uploaded. The model is downloaded with a pinned checksum when packaging and is not stored in git; `packaging/clip/make_prompts.py` rebuilds the label embeddings in `xero_wallpapers/data/clip_prompts.json`.
 
 ## License
 

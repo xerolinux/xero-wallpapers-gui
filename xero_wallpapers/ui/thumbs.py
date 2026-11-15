@@ -26,7 +26,9 @@ HERO_MAX_BYTES = 8 * 1024 * 1024
 HERO_WIDTH = 1920
 MAX_PIXELS = 64_000_000
 BLUR_SIZE = 48
-LOCAL_BLUR_MAX_BYTES = 50 * 1024 * 1024
+LOCAL_MAX_BYTES = 50 * 1024 * 1024
+# Library tiles are at most a few hundred pixels wide; one small copy per file keeps the page fast.
+LOCAL_THUMB = 640
 
 THUMB_EXECUTOR = ThreadPoolExecutor(max_workers=6)
 
@@ -156,6 +158,41 @@ def _open_reduced(data: bytes, box: tuple[int, int] = (HERO_WIDTH, 1)) -> Image.
     return image
 
 
+def _local_key(prefix: str, path: Path) -> str:
+    st = path.stat()
+    return f"{prefix}:{path}:{st.st_mtime_ns}:{st.st_size}"
+
+
+def _jpeg(image: Image.Image) -> bytes:
+    buf = io.BytesIO()
+    image.save(buf, "JPEG", quality=88)
+    return buf.getvalue()
+
+
+def local_thumb_bytes(path: Path) -> bytes:
+    cache = _cache_path(_local_key("local", path))
+    data = _read_cached(cache)
+    if data is None:
+        if path.stat().st_size > LOCAL_MAX_BYTES:
+            raise ValueError("file too large for a thumbnail")
+        image = _open_reduced(path.read_bytes(), (LOCAL_THUMB, LOCAL_THUMB)).convert("RGB")
+        image.thumbnail((LOCAL_THUMB, LOCAL_THUMB))
+        data = _jpeg(image)
+        _store(cache, data)
+    return data
+
+
+def frame_path(video: Path) -> Path:
+    return _cache_path(_local_key("frame", video))
+
+
+def store_frame(video: Path, frame: QImage):
+    buf = QBuffer()
+    buf.open(QBuffer.OpenModeFlag.WriteOnly)
+    frame.save(buf, "JPEG", 88)
+    _store(frame_path(video), bytes(buf.data()))
+
+
 def hero_bytes(url: str) -> bytes:
     require_http(url)
     path = _cache_path("hero:" + url)
@@ -261,11 +298,10 @@ class ThumbProvider(QQuickAsyncImageProvider):
         if url.startswith("blur\n"):
             inner = url.removeprefix("blur\n")
             if inner.startswith("file:"):
-                path = Path(QUrl(inner).toLocalFile())
-                if path.stat().st_size > LOCAL_BLUR_MAX_BYTES:
-                    raise ValueError("file too large to blur")
-                return blurred(path.read_bytes())
+                return blurred(local_thumb_bytes(Path(QUrl(inner).toLocalFile())))
             return blurred(cached_bytes(inner))
+        if url.startswith("local\n"):
+            return ThumbProvider._image(local_thumb_bytes(Path(QUrl(url.removeprefix("local\n")).toLocalFile())))
         if not url.startswith("hero\n"):
             return ThumbProvider._image(cached_bytes(url))
         _, original, preview, thumb = url.split("\n")

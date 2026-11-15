@@ -256,21 +256,14 @@ Item {
                 text: "Nothing here yet"
                 explanation: page.activeFilters.length > 0 ? "Try another source or clear your filters." : "Try another source or clear your search."
             }
-        }
 
-        footer: Item {
-            width: grid.width - page.gap
-            height: grid.count > 0 ? notice.height + Kirigami.Units.gridUnit * 2 : 0
-            visible: grid.count > 0
-
-            // Sources are queried slowly on purpose (per-site rate limits), so say so where waiting is noticed.
+            // Sources are queried slowly on purpose (per-site rate limits), so say so above the results.
             Rectangle {
-                id: notice
-
-                anchors.centerIn: parent
-                width: noticeLabel.implicitWidth + 28
-                height: noticeLabel.implicitHeight + 10
-                radius: height / 2
+                Layout.alignment: Qt.AlignHCenter
+                Layout.bottomMargin: 14
+                implicitWidth: noticeLabel.implicitWidth + 36
+                implicitHeight: noticeLabel.implicitHeight + 14
+                radius: 8
                 color: Qt.alpha(page.noticeOrange, 0.16)
                 border.width: 1
                 border.color: Qt.alpha(page.noticeOrange, 0.6)
@@ -279,9 +272,10 @@ Item {
                     id: noticeLabel
 
                     anchors.centerIn: parent
-                    text: "Some sources load slower so we don't flood them with requests"
+                    text: "Some sources may load slower, to avoid Request Flood."
                     color: page.noticeOrange
-                    font.pointSize: smallPointSize
+                    font.pointSize: 10
+                    font.weight: Font.DemiBold
                 }
             }
         }

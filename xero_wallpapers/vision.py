@@ -22,8 +22,8 @@ STD = (0.26862954, 0.26130258, 0.27577711)
 LOGIT_SCALE = 50.0
 THRESHOLD = 0.34
 
-# One picture at a time on two cores: fast enough for a page of results without spinning up the fans.
-EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vision")
+# Two pictures at a time on two cores each: a page of results checks in a second or two without pinning the CPU.
+EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="vision")
 _lock = threading.Lock()
 _state: dict = {}
 

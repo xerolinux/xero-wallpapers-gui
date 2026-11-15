@@ -22,6 +22,7 @@ from PyQt6.QtGui import QDesktopServices, QGuiApplication, QImage
 
 from .. import dupes, kpackage, library, net, paths, slideshow, svwr, update, upscale, vision, wallpaper
 from ..anime import HIDDEN_CATEGORIES, blocked
+from ..checkcache import CheckCache
 from ..colors import hue_matches, palette
 from ..config import Config
 from ..downloads import SAFE_SCHEMES, DownloadCancelled, already_downloaded, download
@@ -64,10 +65,16 @@ LOCAL_SORTS = {
     "size": (lambda i: i.file_size, True),
 }
 FILTER_KEYS = {f.name for f in fields(Filters)}
-MAX_AUTO_PAGES = 4
+MAX_AUTO_PAGES = 8
+# Sites rarely filter by colour, but searching the colour name finds mostly matching wallpapers; the palette
+# check still decides. Keys are the filter popup's hues.
+HUE_WORDS = {0: "red", 30: "orange", 55: "yellow", 130: "green", 180: "teal", 215: "blue", 265: "purple", 310: "pink"}
 FILL_ROWS = 24
 RATIO_TOLERANCE = 0.02
-SIZE_CALLS_PER_MINUTE = 30
+# Per site: a few lookups in parallel so a page of results checks in seconds, still far below browser traffic.
+SIZE_CALLS_PER_MINUTE = 120
+SIZE_WORKERS = 4
+CACHE_SAVE_MS = 3000
 TOP_TAGS = 10
 HERO_MIN_WIDTH = 1920
 HERO_MAX_FILE = 4 * 1024 * 1024
@@ -105,18 +112,8 @@ def _sized(f: Filters, source: Source) -> bool:
 # "yes", "no", or "size" / "colour" while that is still unknown.
 # seen: the vision verdict per thumbnail URL (True hides); only consulted when No anime is on.
 def _verdict(item: Item, f: Filters, source: Source, no_anime: bool = False, seen: dict | None = None) -> str:
-    if no_anime:
-        if blocked(item):
-            return "no"
-        if seen is not None and item.thumb_url:
-            hit = seen.get(item.thumb_url)
-            if hit is None:
-                return "vision"
-            if hit:
-                return "no"
-        # Strict: titles alone miss most character names, so wait for the site's own tags.
-        if source.tags_in_details and not item.extra.get("checked"):
-            return "tags"
+    if no_anime and blocked(item):
+        return "no"
     server = source.server_keys(f)
     if "query" not in server and f.query.strip():
         q = f.query.strip().lower()
@@ -145,6 +142,17 @@ def _verdict(item: Item, f: Filters, source: Source, no_anime: bool = False, see
             return "colour"
         if not hue_matches(item.colors, f.hue):
             return "no"
+    # Content checks last: they cost the most, so only pictures that pass every other filter get them.
+    if no_anime:
+        if seen is not None and item.thumb_url:
+            hit = seen.get(item.thumb_url)
+            if hit is None:
+                return "vision"
+            if hit:
+                return "no"
+        # Without the A.I check, titles alone miss most character names, so wait for the site's own tags.
+        if seen is None and source.tags_in_details and not item.extra.get("checked"):
+            return "tags"
     return "yes"
 
 
@@ -227,9 +235,14 @@ class BrowseController(QObject):
         self._hold_timer.timeout.connect(lambda: self._drain(force=True))
         # One budget per site: browsing one source must not stall size checks on the next.
         self._sizes: dict[str, WorkQueue] = {}
-        self._known_sizes: dict[str, Item] = {}
-        self._known_colors: dict[str, list[str]] = {}
-        self._seen: dict[str, bool] = {}
+        self._checks = CheckCache()
+        self._known_sizes = self._checks.details
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(CACHE_SAVE_MS)
+        self._save_timer.timeout.connect(self._save_checks)
+        self._seen = self._checks.vision
+        self._known_colors = self._checks.colors
         self._waiting: list[tuple[str, Item]] = []
         self._auto_pages = 0
         self._live_enabled = live_enabled
@@ -479,9 +492,11 @@ class BrowseController(QObject):
         self._set_busy(True)
         self._set_error("")
         gen = self._gen
-        server = Filters(
-            **{k: v for k, v in asdict(self._filters).items() if k in source.server_keys(self._filters)}
-        )
+        keys = source.server_keys(self._filters)
+        server = Filters(**{k: v for k, v in asdict(self._filters).items() if k in keys})
+        f = self._filters
+        if f.hue is not None and "hue" not in keys and "query" in keys and not f.query.strip() and not f.category:
+            server = replace(server, query=HUE_WORDS.get(f.hue, ""))
 
         def work():
             try:
@@ -509,7 +524,8 @@ class BrowseController(QObject):
         self._failed_page = 0
         self._page = page
         self._done = not items
-        items = [self._known_sizes.get(i.page_url, i) for i in items]
+        # Size variants (ultra-wide, resolution tiers) were sized at listing time; a cached lookup would undo that.
+        items = [i if i.extra.get("variant") else self._known_sizes.get(i.page_url, i) for i in items]
         for item in items:
             if not item.colors and item.thumb_url in self._known_colors:
                 item.colors = self._known_colors[item.thumb_url]
@@ -630,20 +646,30 @@ class BrowseController(QObject):
         if why == "vision":
             url = item.thumb_url
 
-            def look():
+            def look(data: bytes):
                 try:
-                    hit = bool(vision.looks_blocked(cached_bytes(url)))
+                    hit = bool(vision.looks_blocked(data))
                 except Exception as e:
                     log.debug("vision check for %s failed: %s", url, e)
                     hit = False
                 _safe_emit(self._looked, gen, url, hit)
 
-            vision.EXECUTOR.submit(look)
+            def fetch():
+                # Downloads run on the wide thumbnail pool; only the model itself stays on the vision thread.
+                try:
+                    data = cached_bytes(url)
+                except Exception as e:
+                    log.debug("thumbnail for %s failed: %s", url, e)
+                    _safe_emit(self._looked, gen, url, False)
+                    return
+                vision.EXECUTOR.submit(look, data)
+
+            THUMB_EXECUTOR.submit(fetch)
         elif why in ("size", "tags"):
             queue = self._sizes.get(source.name)
             if queue is None:
                 limiter = RateLimiter(max_calls=SIZE_CALLS_PER_MINUTE, stop=net.STOP)
-                queue = self._sizes[source.name] = WorkQueue(limiter, f"size-check-{source.name}")
+                queue = self._sizes[source.name] = WorkQueue(limiter, f"size-check-{source.name}", SIZE_WORKERS)
             queue.request(item.page_url, lambda: source.details(item),
                           lambda url, found: _safe_emit(self._sizedUp, gen, url, found))
         else:
@@ -663,20 +689,28 @@ class BrowseController(QObject):
         if gen != self._gen:
             return
         if found is not None and found.width > 0 and found.height > 0:
+            self._known_sizes.pop(url, None)
             self._known_sizes[url] = replace(found, extra={**found.extra, "checked": True})
+            self._save_timer.start()
         self._resolve(lambda item: item.page_url == url,
                       lambda item: self._known_sizes.get(url) or replace(item, width=-1, height=-1))
 
     def _on_looked(self, gen: int, url: str, hit: bool):
         self._seen[url] = hit
+        self._save_timer.start()
         if gen == self._gen:
             self._resolve(lambda item: item.thumb_url == url, lambda item: item)
+
+    def _save_checks(self):
+        snapshot = self._checks.snapshot()
+        net.EXECUTOR.submit(self._checks.save, snapshot)
 
     def _on_coloured(self, gen: int, url: str, colors: list):
         if gen != self._gen:
             return
         if colors:
             self._known_colors[url] = colors
+            self._save_timer.start()
 
         def update(item):
             item.colors = colors or ["#808080"]
@@ -704,8 +738,10 @@ class BrowseController(QObject):
         self._maybe_fill()
 
     def _maybe_fill(self):
-        if (self._busy or self._done or self._error or self._waiting or not self._page
-                or not (self._no_anime or _strict(self._filters, self._source(self.currentSource))) or self._model.rowCount() >= FILL_ROWS
+        # Fetch the next page while this one is still being checked, unless enough candidates are already queued.
+        strict = self._no_anime or _strict(self._filters, self._source(self.currentSource))
+        if (self._busy or self._done or self._error or not self._page or not strict
+                or self._model.rowCount() >= FILL_ROWS or len(self._waiting) >= FILL_ROWS
                 or self._auto_pages >= MAX_AUTO_PAGES):
             return
         self._auto_pages += 1

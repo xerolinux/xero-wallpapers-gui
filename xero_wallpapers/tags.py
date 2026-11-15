@@ -175,22 +175,24 @@ class TagFetcher:
 
 
 class WorkQueue:
-    # One rate-limited background thread; jobs with a key already queued are skipped.
-    def __init__(self, limiter, name: str):
+    # Rate-limited background threads sharing one limiter; jobs with a key already queued are skipped.
+    def __init__(self, limiter, name: str, workers: int = 1):
         self._limiter = limiter
         self._name = name
+        self._workers = workers
         self._pending: deque[tuple[str, Callable, Callable]] = deque()
         self._cond = threading.Condition()
-        self._thread: threading.Thread | None = None
+        self._threads: list[threading.Thread] = []
 
     def request(self, key: str, work: Callable, callback: Callable) -> None:
         with self._cond:
             if any(k == key for k, _, _ in self._pending):
                 return
             self._pending.append((key, work, callback))
-            if self._thread is None:
-                self._thread = threading.Thread(target=self._run, name=self._name, daemon=True)
-                self._thread.start()
+            if len(self._threads) < self._workers:
+                thread = threading.Thread(target=self._run, name=f"{self._name}-{len(self._threads)}", daemon=True)
+                self._threads.append(thread)
+                thread.start()
             self._cond.notify()
 
     def clear(self) -> None:
